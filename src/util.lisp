@@ -59,7 +59,7 @@
 
 (defparameter *table* (make-hash-table :test #'equal))
 (defun fresh-memo! ()
-  (setf *table* (make-hash-table)))
+  (setf *table* (make-hash-table :test #'equal)))
 (defun reset-memo! (to)
   (setf *table* to))
 (defun memo-copy ()
