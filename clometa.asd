@@ -11,8 +11,8 @@
   ((:static-file "clometa.asd")
    (:module :src
             :components ((:file "package")
-                         (:file "util")
-                         (:file "clometa"))
+                         (:file "util-i")
+                         (:file "clometa-i"))
             :serial t))
   :depends-on (:alexandria :anaphora :optima :fare-quasiquote-extras))
 
