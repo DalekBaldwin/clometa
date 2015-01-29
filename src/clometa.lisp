@@ -15,7 +15,7 @@
          (when (eql (first (first rules)) :<<)
            (rest (first rules)))))
     (if parents
-        `(desugar '(,@(rest rules)) '(,@parents))
+        `(desugar '(,@(rest rules)) (list ,@parents))
         `(desugar '(,@rules)))))
 
 (defmacro define-ometa (name &body rules)
@@ -27,7 +27,7 @@
      (define-namespace-anchor a)
      (setq ,ns-name (namespace-anchor->namespace a))))
 
-(defun interp/fresh-memo (omprog start-rule stream &optional store ns)
+(defun interp/fresh-memo (omprog start-rule stream &optional store (ns *ns*))
   (fresh-memo!)
   (interp omprog start-rule stream store ns))
 
@@ -53,20 +53,20 @@
   (failure/empty stream store))
 
 (defun rule-apply (name args stream store)
-  (flet ((left-recursion? ()
-           (m-lr? (memo name stream)))
-         (grow-lr (body)
-           (let* ((ans (e body stream store))
-                  (ans-stream (value-stream ans))
-                  (memo-entry (memo name stream))
-                  (memo-stream (value-stream (m-value memo-entry))))
-             (if (or (failure? ans)
-                     (>= (length ans-stream) (length memo-stream)))
-                 (m-value memo-entry)
-                 (progn
-                   (memo-add name stream ans (m-lr? memo-entry)
-                             (m-lr-detected? memo-entry))
-                   (grow-lr body))))))
+  (labels ((left-recursion? ()
+             (m-lr? (memo name stream)))
+           (grow-lr (body)
+             (let* ((ans (e body stream store))
+                    (ans-stream (value-stream ans))
+                    (memo-entry (memo name stream))
+                    (memo-stream (value-stream (m-value memo-entry))))
+               (if (or (failure? ans)
+                       (>= (length ans-stream) (length memo-stream)))
+                   (m-value memo-entry)
+                   (progn
+                     (memo-add name stream ans (m-lr? memo-entry)
+                               (m-lr-detected? memo-entry))
+                     (grow-lr body))))))
     (let ((r (reverse
               (acond
                 ((eql name 'anything) (anything stream (fresh-store)))
@@ -108,7 +108,9 @@
                (`(^ ,name ,from-ometa)
                  (interp/fresh-memo
                   (cons `(,rule-name-temp (apply ,name ,@rule-args))
-                        (ometa-eval from-ometa))
+                        from-ometa
+                        ;;(ometa-eval from-ometa)
+                        )
                   rule-name-temp stream (fresh-store) *ns*))
                (rule-name
                 (rule-apply rule-name rule-args stream (fresh-store))))))
@@ -201,35 +203,50 @@
         (*ns* ns))
     (e `(apply ,start) stream store)))
 
+
+(defun matched! (thing)
+  (format t "~&Matched: ~A~%" thing))
+
 (defun desugar-e (e &optional (i nil))
   (match e
     (`(seq* ,e1) (desugar-e e1 i))
     (`(seq* ,e1 ,e2) `(seq ,(desugar-e e1 i) ,(desugar-e e2 i)))
-    (`(seq* ,e1 ,@e2) `(seq ,(desugar-e e1 i)
-                            ,(desugar-e `(seq* ,@e2)) i))
+    (`(seq* ,e1 ,@e2)
+      `(seq ,(desugar-e e1 i)
+            ,(desugar-e `(seq* ,@e2) i)))
     (`(alt* ,e1) (desugar-e e1 i))
-    (`(alt* ,e1 ,e2) `(alt ,(desugar-e e1 i) ,(desugar-e e2 i)))
-    (`(alt* ,e1 ,@e2) `(alt ,(desugar-e e1 i) ,(desugar-e `(alt* ,@e2) i)))
-    (`(many ,e1) `(many ,(desugar-e e1 i)))
-    (`(many1 ,e1) `(many1 ,(desugar-e e1 i)))
-    (`(many+ ,e1) (let ((a (gensym "+A"))
+    (`(alt* ,e1 ,e2)
+      `(alt ,(desugar-e e1 i) ,(desugar-e e2 i)))
+    (`(alt* ,e1 ,@e2)
+      `(alt ,(desugar-e e1 i) ,(desugar-e `(alt* ,@e2) i)))
+    (`(many ,e1)
+      `(many ,(desugar-e e1 i)))
+    (`(many1 ,e1)
+      `(many1 ,(desugar-e e1 i)))
+    (`(many+ ,e1)
+      (let ((a (gensym "+A"))
                         (rest (gensym "+REST"))
                         (body (desugar-e e1 i)))
                     (desugar-e `(seq* (bind ,a ,body)
                                       (bind ,rest (many ,body))
                                       (-> (cons ,a ,rest)))
                                i)))
-    (`(apply (^ ,rule-name) ,@args) `(apply (^ ,rule-name ,@i) ,@args))
-    (`(bind ,id ,e1) `(bind ,id ,(desugar-e e1 i)))
-    (`(~ ,e1) `(~ ,(desugar-e e1 i)))
-    (`(list ,e1) `(list ,(desugar-e e1 i)))
-    (rest rest)))
+    (`(apply (^ ,rule-name) ,@args)
+      `(apply (^ ,rule-name ,@i) ,@args))
+    (`(bind ,id ,e1)
+      `(bind ,id ,(desugar-e e1 i)))
+    (`(~ ,e1)
+      `(~ ,(desugar-e e1 i)))
+    (`(list ,e1)
+      `(list ,(desugar-e e1 i)))
+    (rest
+     rest)))
 
 (defun desugar-rule (rule i)
   (match rule
     (`(,name ,@ids-and-body)
       `(,name ,@(butlast ids-and-body)
-              ,@(desugar-e (last ids-and-body) i)))
+              ,(desugar-e (first (last ids-and-body)) i)))
     (_ (error "Bad syntax in rule ~A" rule))))
 
 (defun desugar (omprog &optional (i nil))

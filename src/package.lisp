@@ -15,6 +15,8 @@
    #:list->string
    
    #:<<
+   #:^
+   
    #:empty
    #:seq
    #:seq*
