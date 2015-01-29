@@ -6,5 +6,3 @@
    #:test-all))
 
 (in-package :clometa-test)
-
-(defparameter *system-directory* clometa::*system-directory*)

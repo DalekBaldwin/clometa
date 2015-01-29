@@ -5,23 +5,24 @@
   `(interp/fresh-memo
     ,omprog ',start (construct-stream ,input) nil ,@(when ns (list ns))))
 
-(defmacro ometa ((&rest rules))
+(defmacro ometa (&rest rules)
   (let ((parents
-         (when (eql (first (first rule)) :<<)
-           (rest (first rule)))))
+         (when (eql (first (first rules)) :<<)
+           (rest (first rules)))))
     (if parents
-        (desugar `(,@(rest rules)) `(,@parents))
-        (desugar `(,@rules)))))
+        `(desugar '(,@(rest rules)) '(,@parents))
+        `(desugar '(,@rules)))))
 
 (defmacro define-ometa (name &rest rules)
   `(setq ,name (ometa ,@rules)))
 
+#+nil
 (defmacro define-ometa-namespace (ns-name)
   `(progn
      (define-namespace-anchor a)
      (setq ,ns-name (namespace-anchor->namespace a))))
 
-(defun interp/fresh-memo (omprog start-rule stream &optional store (ns ns))
+(defun interp/fresh-memo (omprog start-rule stream &optional store ns)
   (fresh-memo!)
   (interp omprog start-rule stream store ns))
 
@@ -92,7 +93,8 @@
                                  (`(^ ,name ,from-ometa)
                                    (interp/fresh-memo
                                     (cons `(,rule-name-temp (apply ,name ,@rule-args))
-                                          (eval from-ometa ns))
+                                          (eval from-ometa;; ns
+                                                ))
                                     rule-name-temp stream (fresh-store) ns))
                                  (rule-name
                                   (rule-apply rule-name rule-args stream (fresh-store))))))
@@ -138,11 +140,13 @@
                                (fail fail)))
                      ((->) (let ((env (store->env store))
                                  (code (second exp))
-                                 (result (eval `(let* ,(reverse env) ,code) ns)))
+                                 (result (eval `(let* ,(reverse env) ,code);; ns
+                                               )))
                              (list result stream store)))
                      ((->?) (let ((env (store->env store))
                                   (code (second exp))
-                                  (result (eval `(let* ,(reverse env) ,code) ns)))
+                                  (result (eval `(let* ,(reverse env) ,code);; ns
+                                                )))
                               (if result
                                   (list :none stream store)
                                   (fail/empty stream store))))
@@ -200,7 +204,7 @@
 (defun desugar (omprog &optional (i nil))
   (flet ((desugar-rule (rule)
            (match rule
-             (`(name ,@ids-and-body)
+             (`(,name ,@ids-and-body)
                `(,name ,@(butlast ids-and-body)
                        ,(desugar-e (last ids-and-body) i)))
              (_ (error "Bad syntax in rule ~A" rule)))))

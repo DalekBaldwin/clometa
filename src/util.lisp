@@ -1,21 +1,25 @@
 (in-package :clometa)
 
+(defun build-list (length function)
+  (loop for i from 0 below length
+       collect (funcall function i)))
+
 (defun construct-stream (input)
   (labels ((list->stream (l &optional (depth 0))
              (build-list (length l)
                          (lambda (n)
-                           `((depth ,n)
+                           `((,depth ,n)
                              ,(cond
-                               ((list? (list-ref l n))
-                                (list->stream (list-ref l n) n))
-                               (t (list-ref l n)))))))
+                               ((listp (nth n l))
+                                (list->stream (nth n l) n))
+                               (t (nth n l)))))))
            (string->stream (s &optional (depth 0))
-             (build-list (string-length s)
+             (build-list (length s)
                          (lambda (n)
-                           `((,depth ,n) ,(string-ref s n))))))
+                           `((,depth ,n) ,(elt s n))))))
     (cond
-      ((list? input) (list `((-1 0) ,(list->stream input))))
-      ((string? input) (string->stream input)))))
+      ((listp input) (list `((-1 0) ,(list->stream input))))
+      ((stringp input) (string->stream input)))))
 
 (defun andmap (function list &optional accum)
   (acond
@@ -48,7 +52,7 @@
   (setf *table* (make-hash-table)))
 (defun reset-memo! (to)
   (setf *table* to))
-(defun memo-copy
+(defun memo-copy ()
     (copy-hash-table *table*))
 (defun memo (rule-name stream)
   (gethash (list rule-name stream) *table*))
