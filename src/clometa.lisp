@@ -62,7 +62,7 @@
                   (memo-stream (value-stream (m-value memo-entry))))
              (if (or (failure? ans)
                      (>= (length ans-stream) (length memo-stream)))
-                 (mvalue memo-entry)
+                 (m-value memo-entry)
                  (progn
                    (memo-add name stream ans (m-lr? memo-entry)
                              (m-lr-detected? memo-entry))
