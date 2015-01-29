@@ -41,7 +41,7 @@
      nil)))
 
 (defun stream? (stream)
-  (and (list? stream)
+  (and (listp stream)
        (andmap (lambda (p)
                  (match p
                    ((list (list (satisfies numberp) (satisfies numberp)) _) t)

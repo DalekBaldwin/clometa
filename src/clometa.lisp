@@ -100,12 +100,10 @@
            (debug-pre-apply rule-expr stream store)
            (let ((ans
                   (match rule-expr
-                                 ;;;; syntax????
                     (`(^ ,name ,from-ometa)
                       (interp/fresh-memo
                        (cons `(,rule-name-temp (apply ,name ,@rule-args))
-                             (ometa-eval from-ometa;; ns
-                                         ))
+                             (ometa-eval from-ometa))
                        rule-name-temp stream (fresh-store) *ns*))
                     (rule-name
                      (rule-apply rule-name rule-args stream (fresh-store))))))
@@ -151,20 +149,26 @@
                   (failure failure)))
         ((->) (let* ((env (store->env store))
                      (code (second exp))
-                     (result (ometa-eval `(let* ,(reverse env) ,code);; ns
-                                         )))
+                     (result (ometa-eval
+                              `(let* ,(reverse env)
+                                 (declare (ignorable
+                                           ,@(mapcar #'first env)))
+                                 ,code))))
                 (list result stream store)))
         ((->?) (let* ((env (store->env store))
                       (code (second exp))
-                      (result (ometa-eval `(let* ,(reverse env) ,code);; ns
-                                          )))
+                      (result (ometa-eval
+                               `(let* ,(reverse env)
+                                  (declare (ignorable
+                                            ,@(mapcar #'first env)))
+                                  ,code))))
                  (if result
                      (list :none stream store)
                      (failure/empty stream store))))
         ((list)
-         (let ((temprule (gensym "RULE"))
-               (list-pattern (second exp))
-               (subprog (cons (list temprule list-pattern) rules)))
+         (let* ((temprule (gensym "RULE"))
+                (list-pattern (second exp))
+                (subprog (cons (list temprule list-pattern) *rules*)))
            (if (empty? stream)
                (failure/empty stream store)
                (match (car stream)
