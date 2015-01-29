@@ -1,4 +1,4 @@
-(in-package :clometa)
+(in-package :clometa.i)
 
 (defun empty? (s) (null s))
 

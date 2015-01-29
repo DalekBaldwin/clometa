@@ -1,6 +1,6 @@
 (in-package :cl-user)
 
-(defpackage :clometa
+(defpackage :clometa.i
   (:use :cl :alexandria :anaphora :optima)
   (:export
    #:interp

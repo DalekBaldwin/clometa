@@ -1,8 +1,8 @@
 (in-package :cl-user)
 
-(defpackage :clometa-test
-  (:use :cl :clometa :stefil)
+(defpackage :clometa.i-test
+  (:use :cl :clometa.i :stefil)
   (:export
    #:test-all))
 
-(in-package :clometa-test)
+(in-package :clometa.i-test)

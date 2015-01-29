@@ -1,4 +1,4 @@
-(in-package :clometa-test)
+(in-package :clometa.i-test)
 
 (in-root-suite)
 
@@ -7,7 +7,7 @@
 (defparameter *depth* 0)
 (defparameter *introspect* nil)
 
-(defmethod clometa::dispatch :around (head exp stream store)
+(defmethod clometa.i::dispatch :around (head exp stream store)
   (when *introspect*
     (format t "~&~A>~S~%"
             (with-output-to-string (s)
@@ -25,7 +25,7 @@
                 result))
       result)))
 
-(defmethod clometa::ometa-eval :around (form)
+(defmethod clometa.i::ometa-eval :around (form)
   (when *introspect*
     (format t "~&~A>~S~%"
             (with-output-to-string (s)

@@ -1,4 +1,4 @@
-(in-package :clometa)
+(in-package :clometa.i)
 (named-readtables:in-readtable :fare-quasiquote)
 
 (defparameter *stream* nil)
