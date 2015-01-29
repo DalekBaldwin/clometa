@@ -21,14 +21,6 @@
   (number (many+ (apply digit)))
   (spaces (many+ (atom #\space))))
 
-(defun list->string (list)
-  (make-array (list (length list))
-              :element-type 'character
-              :initial-contents list
-              :adjustable nil
-              :fill-pointer nil
-              :displaced-to nil))
-
 (defun char->number (char)
   (case char
     (#\0 0)

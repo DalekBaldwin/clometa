@@ -1,5 +1,15 @@
 (in-package :clometa)
 
+(defun empty? (s) (null s))
+
+(defun list->string (list)
+  (make-array (list (length list))
+              :element-type 'character
+              :initial-contents list
+              :adjustable nil
+              :fill-pointer nil
+              :displaced-to nil))
+
 (defun build-list (length function)
   (loop for i from 0 below length
        collect (funcall function i)))
@@ -41,9 +51,9 @@
 (defun de-index-list (l)
   (flet ((de-index (node)
            (cond
-             ((list? (cadr node)) (de-index-list (cadr node)))
+             ((listp (cadr node)) (de-index-list (cadr node)))
              (t (cadr node)))))
-    (if (list? l)
+    (if (listp l)
         (mapcar #'de-index l)
         l)))
 
@@ -58,12 +68,12 @@
   (gethash (list rule-name stream) *table*))
 (defun memo-add (rule-name stream value &optional (lr? nil) (lr-detected? nil))
   (setf (gethash (list rule-name stream) *table*) (list value lr? lr-detected?)))
-(defun fresh-store () (lambda ()))
+(defun fresh-store () nil)
 (defun store->env (a-list)
   (flet ((quote-value (binding)
            (match binding
              ((list id v) `(,id ',v)))))
-    (map #'quote-value a-list)))
+    (mapcar #'quote-value a-list)))
 (defun append-old-store (ans old-store)
   (let* ((rev-ans (reverse ans))
          (new-store (car rev-ans)))
@@ -86,8 +96,14 @@
   (if (empty? s)
       nil
       (caar s)))
-(setf (symbol-function 'm-lr?)  #'second)
-(setf (symbol-function 'm-lr-detected?) #'third)
+
+;;(setf (symbol-function 'm-value) #'first)
+;;(setf (symbol-function 'm-lr?) #'second)
+;;(setf (symbol-function 'm-lr-detected?) #'third)
+
+(defun m-value (m) (first m))
+(defun m-lr? (m) (second m))
+(defun m-lr-detected? (m) (third m))
 
 (defparameter *debug* nil)
 (defparameter *debug-count* 0)
@@ -96,16 +112,16 @@
   (when *debug*
     (unless (eql rule-name :anything)
       (format t "~&~A   |~A -stream ~A -store ~A~%"
-              (list->string (build-list *debug-count*)
-                            (lambda (n) #\>))
-              rule-name (de-index-list strieam) store)
+              (list->string (build-list *debug-count*
+                                        (lambda (n) #\>)))
+              rule-name (de-index-list stream) store)
       (incf *debug-count*))))
 
 (defun debug-post-apply (rule-name stream store ans)
   (when *debug*
     (unless (eql rule-name :anything)
       (format t "~&~A   |~A -stream ~A -store ~A~%"
-              (list->string (build-list *debug-count*)
-                            (lambda (n) #\<))
-              rule-name (de-index-list strieam)
+              (list->string (build-list *debug-count*
+                                        (lambda (n) #\<)))
+              rule-name (de-index-list stream)
               (append store (last ans)) (first ans)))))

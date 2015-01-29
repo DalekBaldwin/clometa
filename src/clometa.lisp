@@ -45,14 +45,15 @@
       (failure/empty stream store)
       (list (de-index-list (cadr (car stream))) (cdr stream) store)))
 
+(defun init-memo/failure-and-align-flags-for-planting-seed (name stream)
+  (memo-add name stream (failure/empty stream (fresh-store)) t))
+
+(defun align-flags-for-growing-and-failure (name stream store)
+  (memo-add name stream (m-value (memo name stream)) nil t)
+  (failure/empty stream store))
 
 (defun rule-apply (name args stream store)
-  (flet ((init-memo/failure-and-align-flags-for-planting-seed ()
-           (memo-add name stream (failure/empty stream (fresh-store)) t))
-         (align-flags-for-growing-and-failure ()
-           (memo-add name stream (m-value (memo name stream)) nil t)
-           (failure/empty stream store))
-         (left-recursion? ()
+  (flet ((left-recursion? ()
            (m-lr? (memo name stream)))
          (grow-lr (body)
            (let* ((ans (e body stream store))
@@ -68,14 +69,14 @@
                    (grow-lr body))))))
     (let ((r (reverse
               (acond
-                ((eql name :anything) (anything stream (fresh-store)))
+                ((eql name 'anything) (anything stream (fresh-store)))
                 ((memo name stream)
                  (if (left-recursion?)
-                     (align-flags-for-growing-and-failure)
+                     (align-flags-for-growing-and-failure name stream store)
                      (m-value it)))
                 ((find-rule-by-name name *rules* args)
-                 (init-memo/failure-and-align-flags-for-planting-seed)
-                 (let ((ans (funcall #'e it stream (fresh-store)))
+                 (init-memo/failure-and-align-flags-for-planting-seed name stream)
+                 (let ((ans (e it stream (fresh-store)))
                        (m (memo name stream)))
                    (memo-add name stream ans nil (m-lr-detected? m))
                    (if (and (m-lr-detected? m)
@@ -84,6 +85,9 @@
                        ans)))
                 (t (error "no such rule ~A" name))))))
       (reverse (cons (append (car r) store) (cdr r))))))
+
+(defun ometa-eval (form)
+  (eval form))
 
 (defun e (exp stream store)
   (match
@@ -100,8 +104,8 @@
                     (`(^ ,name ,from-ometa)
                       (interp/fresh-memo
                        (cons `(,rule-name-temp (apply ,name ,@rule-args))
-                             (eval from-ometa;; ns
-                                   ))
+                             (ometa-eval from-ometa;; ns
+                                         ))
                        rule-name-temp stream (fresh-store) *ns*))
                     (rule-name
                      (rule-apply rule-name rule-args stream (fresh-store))))))
@@ -116,7 +120,7 @@
         ((seq)
          (match (e (second exp) stream store)
            ((list val s st) (e (third exp) s st))
-           ('failure failure)))
+           (:failure failure)))
         ((atom)
          (flet ((a? (b) (equal b (cadr exp))))
            (match (e `(apply anything) stream store)
@@ -145,15 +149,15 @@
                   ((list val s st)
                    (list val s (cons (list (second exp) val) st)))
                   (failure failure)))
-        ((->) (let ((env (store->env store))
-                    (code (second exp))
-                    (result (eval `(let* ,(reverse env) ,code);; ns
-                                  )))
-                (list result stream store)))
-        ((->?) (let ((env (store->env store))
+        ((->) (let* ((env (store->env store))
                      (code (second exp))
-                     (result (eval `(let* ,(reverse env) ,code);; ns
-                                   )))
+                     (result (ometa-eval `(let* ,(reverse env) ,code);; ns
+                                         )))
+                (list result stream store)))
+        ((->?) (let* ((env (store->env store))
+                      (code (second exp))
+                      (result (ometa-eval `(let* ,(reverse env) ,code);; ns
+                                          )))
                  (if result
                      (list :none stream store)
                      (failure/empty stream store))))
@@ -217,7 +221,7 @@
   (match rule
     (`(,name ,@ids-and-body)
       `(,name ,@(butlast ids-and-body)
-              ,(desugar-e (last ids-and-body) i)))
+              ,@(desugar-e (last ids-and-body) i)))
     (_ (error "Bad syntax in rule ~A" rule))))
 
 (defun desugar (omprog &optional (i nil))
@@ -229,7 +233,7 @@
      (match it
        (`(,name_ ,@ids-and-body)
          (flet ((bind (id arg) `(bind ,id (-> ,arg))))
-           (desugar-e `(seq* ,@(mapcar #'bind (butlast ids-and-body))
-                             ,(last ids-and-body)))))
+           (desugar-e `(seq* ,@(mapcar #'bind (butlast ids-and-body) args)
+                             ,@(last ids-and-body)))))
        (_ (error "Bad syntax in rule ~A" it))))
     (t nil)))

@@ -10,6 +10,10 @@
    #:define-ometa
    #:omatch
    
+   #:anything
+   
+   #:list->string
+   
    #:<<
    #:empty
    #:seq
