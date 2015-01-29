@@ -86,7 +86,7 @@
                 (t (error "no such rule ~A" name))))))
       (reverse (cons (append (car r) store) (cdr r))))))
 
-(defun ometa-eval (form)
+(defmethod ometa-eval (form)
   (eval form))
 
 (defun e (exp stream store)
@@ -122,7 +122,7 @@
   (:method ((head (eql 'seq)) exp stream store)
     (match (e (second exp) stream store)
       ((list val s st) (e (third exp) s st))
-      (:failure failure)))
+      (failure failure)))
   (:method ((head (eql 'atom)) exp stream store)
     (flet ((a? (b) (equal b (cadr exp)))) ;; should this be eql??
       (match (e `(apply anything) stream store)
@@ -131,7 +131,8 @@
         (_ (failure/empty stream store)))))
   (:method ((head (eql 'alt)) exp stream store)
     (match (e (second exp) stream store)
-      ((list :failure failurelist s t) (e (third exp) stream st))
+      ((list :failure failurelist s st)
+       (e (third exp) stream st))
       (result result)))
   (:method ((head (eql 'many)) exp stream store)
     (match (e (second exp) stream store)
@@ -193,8 +194,6 @@
              (failure/empty stream store))
             (oops (error "Stream cell must contain a value: ~A"
                          (car stream))))))))
-
-
 
 (defun interp (omprog start stream store ns)
   (let ((rules omprog)
