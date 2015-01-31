@@ -12,9 +12,16 @@
    (:module :src
             :components ((:file "package")
                          (:file "util-i")
-                         (:file "clometa-i"))
+                         (:file "clometa-i")
+                         (:file "clometa-c")
+                         )
             :serial t))
-  :depends-on (:alexandria :anaphora :optima :fare-quasiquote-extras))
+  :depends-on (:alexandria
+               :anaphora
+               :optima
+               :fare-quasiquote-extras
+               :cl-hash-util
+               :contextl))
 
 (defsystem :clometa-test
   :name "clometa-test"
@@ -23,4 +30,4 @@
   ((:module :test
             :components ((:file "package")
                          (:file "clometa-test" :depends-on ("package")))))
-  :depends-on (:clometa :stefil))
+  :depends-on (:clometa :stefil :cl-hash-util))

@@ -17,6 +17,7 @@
    #:<<
    #:^
    
+   #:foreign
    #:empty
    #:seq
    #:seq*
@@ -29,3 +30,6 @@
    #:bind
    #:->
    #:->?))
+
+(defpackage :clometa.c
+  (:use :cl :clometa.i :contextl :optima))
