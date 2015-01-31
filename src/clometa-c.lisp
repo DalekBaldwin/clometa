@@ -361,9 +361,9 @@
   (symbol (seq* (bind s (anything))
                 (->? (symbolp s))
                 (-> s)))
-  (start (seq* (list (bind stuff (real-clause)))
-               (-> stuff)
-               ))
+  (start (seq* (alt (bind derp (real-clause))
+               (list (bind derp (many (real-clause)))))
+               (-> (list derp))))
   (real-clause
    (alt*
     (@empty)
@@ -400,7 +400,7 @@
                            (bind form (real-clause))))
                (-> (make-ometa-clause
                     :bindings nil
-                    :form `(* ,form)))))
+                    :form `(* ,(ometa-clause-form form))))))
   (@neg (seq* (list (seq* (bind n (symbol))
                           (->? (eql n '~))
                           (bind form (real-clause))))
@@ -436,8 +436,9 @@
 
 #+nil
 (first
- (omatch ometa-grammar @or
-         '(or  (eql :x))))
+ (omatch ometa-grammar start
+         '((or (* (bind x (eql :x))) (bind y (eql :y)))
+           (bind a (eql :a)))))
 
 (defun process-body (body)
   (match body
