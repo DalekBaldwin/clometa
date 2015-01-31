@@ -57,17 +57,27 @@
         (mapcar #'de-index l)
         l)))
 
+
+;; top level should be #'equal to deal with (^ rule from-ometa), right?
 (defparameter *table* (make-hash-table :test #'equal))
 (defun fresh-memo! ()
   (setf *table* (make-hash-table :test #'equal)))
 (defun reset-memo! (to)
   (setf *table* to))
 (defun memo-copy ()
-  (copy-hash-table *table*))
+  (copy-hash-table *table* :key #'copy-hash-table))
 (defun memo (rule-name stream)
-  (gethash (list rule-name stream) *table*))
+  (acond
+    ((gethash rule-name *table*)
+     (gethash stream it))))
 (defun memo-add (rule-name stream value &optional (lr? nil) (lr-detected? nil))
-  (setf (gethash (list rule-name stream) *table*) (list value lr? lr-detected?)))
+  (acond
+    ((gethash rule-name *table*)
+     (setf (gethash stream it) (list value lr? lr-detected?)))
+    (t (setf (gethash rule-name *table*)
+             (let ((table (make-hash-table :test #'eql)))
+               (setf (gethash stream table)  (list value lr? lr-detected?))
+               table)))))
 (defun fresh-store () nil)
 (defun store->env (a-list)
   (flet ((quote-value (binding)
