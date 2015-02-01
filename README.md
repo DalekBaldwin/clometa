@@ -1,7 +1,9 @@
-(CL)OMeta
+(C[ommon ]L[isp])OMeta
 =======
+or
 (CLO[S])Meta
 ============
+or
 (C[ontext]L)OMeta
 =================
 
