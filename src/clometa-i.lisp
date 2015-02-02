@@ -178,7 +178,11 @@
     (flet ((a? (b)
              (let ((c (cadr exp)))
                (equal b (acond
-                          ((listp c) (error "Atom argument ~A not an atom" c))
+                          ((listp c)
+                           (match c
+                             ((list 'quote (guard s (symbolp s)))
+                              s)
+                             (_ (error "Atom argument ~A not an atom" c))))
                           ((or (not (symbolp c)) (not (symbol-package c))) c)
                           ((assoc c *store*)
                            (cadr it))
@@ -293,12 +297,12 @@
       `(many1 ,(desugar-e e1 i)))
     (`(many+ ,e1)
       (let ((a (gensym "+A"))
-                        (rest (gensym "+REST"))
-                        (body (desugar-e e1 i)))
-                    (desugar-e `(seq* (bind ,a ,body)
-                                      (bind ,rest (many ,body))
-                                      (-> (cons ,a ,rest)))
-                               i)))
+            (rest (gensym "+REST"))
+            (body (desugar-e e1 i)))
+        (desugar-e `(seq* (bind ,a ,body)
+                          (bind ,rest (many ,body))
+                          (-> (cons ,a ,rest)))
+                   i)))
     (`(apply (^ ,rule-name) ,@args)
       `(apply (^ ,rule-name ,@i) ,@args))
     (`(foreign (^ ,rule-name) ,@args)
@@ -332,7 +336,13 @@
                              ,@(last ids-and-body)))))
        (_ (error "Bad syntax in rule ~A" it))))
     (t nil)))
+
+
+
+;;;;;;;;;;;;;;;;;;;
+
+
 #+nil
-(match 5
-  ((list a b (not c))
+(match ()
+  ((list a b)
    (list a b)))
