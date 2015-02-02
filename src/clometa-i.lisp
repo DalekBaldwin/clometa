@@ -11,12 +11,11 @@
   (define-symbol-macro failure-value (load-time-value *failure-value*)))
 (defvar *failure-value* (gensym "=FAILURE="))
 
-#+nil
-(defmacro omatch (omprog start input &optional ns)
-  `(interp/fresh-memo
-    ,omprog ',start (construct-stream ,input) nil ,@(when ns (list ns))))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (define-symbol-macro empty-value (load-time-value *empty-value*)))
+(defvar *empty-value* (gensym "=EMPTY="))
 
-;; special
+
 (defmacro omatch (omprog start input)
   `(interp/fresh-memo
     ,omprog ',start (construct-stream ,input)))
@@ -31,12 +30,6 @@
 
 (defmacro define-ometa (name &body rules)
   `(defparameter ,name (ometa ,@rules)))
-
-#+nil
-(defmacro define-ometa-namespace (ns-name)
-  `(progn
-     (define-namespace-anchor a)
-     (setq ,ns-name (namespace-anchor->namespace a))))
 
 (defun interp/fresh-memo (omprog start-rule stream)
   (fresh-memo!)
@@ -73,9 +66,7 @@
       (handler-case (e body)
         (match-failure ()
           (values *failure-value* *stream* *store* t)))
-    (let* (;;(ans (e body))
-           ;;(ans-stream (value-stream ans))
-           (memo-entry (memo name *stream*))
+    (let* ((memo-entry (memo name *stream*))
            (memo-stream (value-stream (m-value memo-entry))))
       (if (or failed
               (>= (length stream) (length memo-stream)))
@@ -149,12 +140,9 @@
             (handler-case (rule-apply head (cdr exp))
               (match-failure ()
                 (values *failure-value* *stream* *store* t))))
-        (format t "~&applied rule ~A~%" head)
         (unless (and (memo head *stream*)
                      (m-lr-detected? (memo head *stream*)))
-          (format t "~&resetting memo~%")
           (reset-memo! old-memo))
-        (format t "~&returning ~A ~A ~A~%" result stream store)
         (if failed
             (signal 'match-failure)
             (values result stream (append *store* store))))))
@@ -178,38 +166,8 @@
         (if (eql result *failure-value*)
             (signal 'match-failure)
             (values result stream (append *store* store))))))
-  #+nil
-  (:method ((head (eql 'apply)) exp)
-    (let* ((rule-expr (cadr exp))
-           (rule-name-temp (gensym "^RULE"))
-           (rule-args (cddr exp))
-           (old-memo (memo-copy)))
-      ;;(debug-pre-apply rule-expr stream store)
-      (let ((ans
-             (match rule-expr
-               (`(^ ,name ,from-ometa)
-                 (let ((*store* (fresh-store)))
-                   (interp/fresh-memo
-                    (cons `(,rule-name-temp (apply ,name ,@rule-args))
-                          from-ometa
-                          ;;(ometa-eval from-ometa)
-                          )
-                    rule-name-temp
-                    *stream*)))
-               (rule-name
-                (let ((*store* (fresh-store)))
-                  (rule-apply rule-name rule-args))))))
-        (unless (and (memo rule-expr *stream*)
-                     (m-lr-detected? (memo rule-expr *stream*)))
-          (reset-memo! old-memo))
-        ;;(debug-post-apply rule-expr stream store ans)
-        (append-old-store ans *store*)))) ;; what to do?
-  #+nil
-  (:method ((head (eql 'anything)) exp)
-    (let ((*store* (fresh-store)))
-      (anything)))
   (:method ((head (eql 'empty)) exp)
-    (values :none *stream* *store*))
+    (values *empty-value* *stream* *store*))
   (:method ((head (eql 'seq)) exp)
     (multiple-value-match (e (second exp))
       ((_ stream store)
@@ -224,7 +182,7 @@
                           ((or (not (symbolp c)) (not (symbol-package c))) c)
                           ((assoc c *store*)
                            (cadr it))
-                          (t (error "No binding for ~A in store ~A" c *store*))))))) ;; should this be eql??
+                          (t (error "No binding for ~A in store ~A" c *store*)))))))
       (multiple-value-match (e `(anything))
         (((guard a (a? a)) stream store)
          (values a stream store))
@@ -232,8 +190,7 @@
   (:method ((head (eql 'alt)) exp)
     (handler-case (e (second exp))
       (match-failure ()
-        (e (third exp))
-        )
+        (e (third exp)))
       (:no-error (result stream store)
         (values result stream store))))
   (:method ((head (eql 'many)) exp)
@@ -257,7 +214,7 @@
   (:method ((head (eql '~)) exp)
     (handler-case (e (second exp))
       (match-failure ()
-        (values :none *stream* *store*))
+        (values *empty-value* *stream* *store*))
       (:no-error (result stream store)
         (declare (ignorable result))
         (signal 'match-failure nil stream store))))
@@ -286,15 +243,13 @@
                         ,@(mapcar #'first env)))
               ,code))
         (if result
-            (values :none *stream* *store*)
-            ;;(failure/empty)
+            (values *empty-value* *stream* *store*)
             (signal 'match-failure nil stream store)))))
   (:method ((head (eql 'list)) exp)
     (let* ((temprule (gensym "RULE"))
            (list-pattern (second exp))
            (subprog (cons (list temprule list-pattern) *rules*)))
       (if (empty? *stream*)
-          ;;(failure/empty)
           (signal 'match-failure nil *stream* *store*)
           (match (car *stream*)
             ((list pos (guard substream (stream? substream)))
@@ -312,10 +267,7 @@
                          (car *stream*))))))))
 
 (defun interp (omprog start)
-  (let ((rules omprog)
-        (*rules* omprog))
-    ;;(e `(,start))
-    ;;#+nil
+  (let ((*rules* omprog))
     (handler-case (e `(,start))
       (match-failure (c)
         (values *failure-value* *stream* *store*)))))
