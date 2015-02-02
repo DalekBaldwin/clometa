@@ -9,8 +9,7 @@
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (define-symbol-macro failure-value (load-time-value *failure-value*)))
-(defvar *failure-value* (list :failure))
-
+(defvar *failure-value* (gensym "=FAILURE="))
 
 #+nil
 (defmacro omatch (omprog start input &optional ns)
@@ -70,33 +69,37 @@
   ;;(failure/empty)
   )
 
+
+(defun grow-lr (name body)
+  (multiple-value-bind (result stream store failed)
+      (handler-case (e body)
+        (match-failure (c)
+          (values *failure-value* *stream* *store* t)))
+    (let* (;;(ans (e body))
+           ;;(ans-stream (value-stream ans))
+           (memo-entry (memo name *stream*))
+           (memo-stream (value-stream (m-value memo-entry))))
+      (if (or failed
+              (>= (length stream) (length memo-stream)))
+          (m-value memo-entry)
+          (progn
+            (memo-add name *stream*
+                      (list result stream store)
+                      (m-lr? memo-entry)
+                      (m-lr-detected? memo-entry))
+            (grow-lr name body))))))
+
 (macrolet
     ((introspect (arg)
        `()
-       ;;`(format t "~&Debug: ~A~%" ,arg)
-       ))
+       #+nil
+       `(if (eql name 'clometa.i-test::int)
+            (format t "~&Debug: ~A~%" ,arg)
+            ,arg
+            )))
   (defun rule-apply (name args)
     (labels ((left-recursion? ()
-               (m-lr? (memo name *stream*)))
-             (grow-lr (body)
-               (introspect "grow-lr")
-               (multiple-value-bind (result stream store failed)
-                   (handler-case (e body)
-                     (match-failure (c)
-                       (values *failure-value* *stream* *store* t)))
-                 (let* (;;(ans (e body))
-                        ;;(ans-stream (value-stream ans))
-                        (memo-entry (memo name *stream*))
-                        (memo-stream (value-stream (m-value memo-entry))))
-                   (if (or failed
-                           (>= (length stream) (length memo-stream)))
-                       (m-value memo-entry)
-                       (progn
-                         (memo-add name *stream*
-                                   (list result stream store)
-                                   (m-lr? memo-entry)
-                                   (m-lr-detected? memo-entry))
-                         (grow-lr body)))))))
+               (m-lr? (memo name *stream*))))
       (let ((r
              (acond
                ((eql name 'anything)
@@ -105,7 +108,7 @@
                   (anything)))
                ((memo name *stream*)
                 (introspect "memo found")
-                (if (left-recursion?)
+                (if (m-lr? it)
                     (align-flags-for-growing-and-failure name)
                     (let ((results (m-value it)))
                       (if (eql (first results) *failure-value*)
@@ -118,17 +121,17 @@
                 (let ((*store* (fresh-store)))
                   (multiple-value-bind (result stream store failed)
                       (handler-case (e it)
-                        (match-failure (c)
-                          (format t "~&caught failure in apply ~A ~A~%" it *stream*)
+                        (match-failure ()
                           (values *failure-value* *stream* *store* t)))
                     (introspect (list "stuff" result stream store failed))
                     (let ((m (memo name *stream*)))
                       (memo-add name *stream* (list result stream store)
                                 nil (m-lr-detected? m))
                       (cond ((and (m-lr-detected? m)
-                                  (not failed))
+                                  (not (eql result *failure-value*) ;;failed
+                                       ))
                              
-                             (let ((results (grow-lr it)))
+                             (let ((results (grow-lr name it)))
                                (if (eql (first results) *failure-value*)
                                    (signal 'match-failure)
                                    results)))
@@ -181,8 +184,8 @@
                        from-ometa)
                  rule-name-temp
                  *stream*))))
-        (unless (and (memo exp *stream*)
-                     (m-lr-detected? (memo exp *stream*)))
+        (unless (and (memo rule-expr *stream*)
+                     (m-lr-detected? (memo rule-expr *stream*)))
           (reset-memo! old-memo))
         (values result stream (append *store* store)))))
   #+nil
@@ -222,7 +225,8 @@
       ((result stream store)
        (let ((*stream* stream)
              (*store* store))
-         (e (third exp))))
+         (e (third exp))
+         ))
       ;;(failure failure)
       ))
   (:method ((head (eql 'atom)) exp)
@@ -234,10 +238,9 @@
   (:method ((head (eql 'alt)) exp)
     (handler-case (e (second exp))
       (match-failure (c)
-        (format t "~&alt failed on ~A~%" (second exp))
-        (e (third exp)))
+        (e (third exp))
+        )
       (:no-error (result stream store)
-        (format t "~&alt succeeded on ~A~%" (second exp))
         (values result stream store))))
   (:method ((head (eql 'many)) exp)
     (handler-case (e (second exp))
