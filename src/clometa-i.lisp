@@ -146,7 +146,7 @@
           (reset-memo! old-memo))
         (if failed
             (signal 'match-failure)
-            (values result stream (append *store* store))))))
+            (values result stream *store*)))))
   (:method ((head (eql 'foreign)) exp)
     (let* ((rule-expr (cadr exp))
            (rule-name-temp (gensym "^RULE"))
@@ -166,7 +166,7 @@
           (reset-memo! old-memo))
         (if (eql result *failure-value*)
             (signal 'match-failure)
-            (values result stream (append *store* store))))))
+            (values result stream *store*)))))
   (:method ((head (eql 'empty)) exp)
     (values *empty-value* *stream* *store*))
   (:method ((head (eql 'seq)) exp)
@@ -232,7 +232,8 @@
            (code (second exp)))
       (multiple-value-bind (result stream store)
           (ometa-eval
-           `(let* ,(reverse env)
+           `(let* (,@(remove-duplicates (reverse env)
+                                        :key #'first))
               (declare (ignorable
                         ,@(mapcar #'first env)))
               ,code))
@@ -243,7 +244,8 @@
            (code (second exp)))
       (multiple-value-bind (result stream store)
           (ometa-eval
-           `(let* ,(reverse env)
+           `(let* (,@(remove-duplicates (reverse env)
+                                        :key #'first))
               (declare (ignorable
                         ,@(mapcar #'first env)))
               ,code))
@@ -335,13 +337,3 @@
                              ,@(last ids-and-body)))))
        (_ (error "Bad syntax in rule ~A" it))))
     (t nil)))
-
-
-
-;;;;;;;;;;;;;;;;;;;
-
-
-#+nil
-(match ()
-  ((list a b)
-   (list a b)))
