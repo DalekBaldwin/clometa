@@ -251,19 +251,14 @@
             (values *empty-value* *stream* *store*)
             (signal 'match-failure nil stream store)))))
   (:method ((head (eql 'list)) exp)
-    (let* ((temprule (gensym "RULE"))
-           (list-pattern (second exp))
-           (subprog (cons (list temprule list-pattern) *rules*)))
+    (let* ((list-pattern (second exp)))
       (if (empty? *stream*)
           (signal 'match-failure nil *stream* *store*)
           (match (car *stream*)
             ((list _ (guard substream (stream? substream)))
              (multiple-value-match
-                 (handler-case
-                     (let ((*stream* substream))
-                       (e list-pattern))
-                   (match-failure ()
-                     (values *failure-value* *stream* *store*)))
+                 (let ((*stream* substream))
+                   (e list-pattern))
                ((_ (guard stream (empty? stream)) store)
                 (values (de-index-list substream)
                         (cdr *stream*)
@@ -272,7 +267,7 @@
             ((list _ (satisfies atom))
              (signal 'match-failure nil *stream* *store*))
             (_ (error "Stream cell must contain a value: ~A"
-                         (car *stream*))))))))
+                      (car *stream*))))))))
 
 (defun interp (omprog start)
   (let ((*rules* omprog))
