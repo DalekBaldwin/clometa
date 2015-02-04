@@ -338,27 +338,51 @@
 
 (defmethod generate-code ((clause or-clause))
   (lambda (cont)
-    (with-gensyms (succeeded result block)
-      `(multiple-value-bind (,succeeded ,result ,@(bindings clause))
+    (with-gensyms (succeeded result rest-results stream block)
+      `(multiple-value-bind (,succeeded ,result ,stream ,@(bindings clause))
            (block ,block
              (tagbody
-                ,@(loop for c in (subclauses clause)
+                ,@(loop for c in (butlast (subclauses clause))
+                     for tag = (gensym "FAIL")
                      collect
                        `(return-from ,block
-                          (let ((,result
-                                 ,(i:omatch ast->code
-                                            start (list c))))
-                            (values
-                             t
-                             ,result
-                             ,@(mapcar
-                                (lambda (b)
-                                  (if (member b (bindings c))
-                                      b
-                                      `nil))
-                                (bindings clause))))))))
+                          (handler-case
+                              (multiple-value-bind (,result ,stream)
+                                  ,(i:omatch ast->code
+                                             start (list c))
+                                (values
+                                 t
+                                 ,result
+                                 ,stream
+                                 ,@(mapcar
+                                    (lambda (b)
+                                      (if (member b (bindings c))
+                                          b
+                                          `nil))
+                                    (bindings clause))))
+                            (match-failure ()
+                              (go ,tag))))
+                     collect tag)
+                (return-from ,block
+                  ,(let ((last-clause (car (last (subclauses clause)))))
+                        `(multiple-value-bind (,result ,stream)
+                             ,(i:omatch ast->code
+                                        start (list last-clause))
+                           (values
+                            t
+                            ,result
+                            ,stream
+                            ,@(mapcar
+                               (lambda (b)
+                                 (if (member b (bindings last-clause))
+                                     b
+                                     `nil))
+                               (bindings clause))))))))
          (if ,succeeded
-             (cons ,result ,(funcall cont))
+             (let ((*stream* ,stream))
+               (multiple-value-bind (,rest-results ,stream)
+                   ,(funcall cont)
+                 (values (append ,result ,rest-results) ,stream)))
              (signal 'match-failure))))))
 
 (defmethod generate-code ((clause many-clause))
@@ -630,7 +654,8 @@
 #+nil
 (defgrammar stuff ()
   (derp ()
-        _ (* 'barf) 'narf))
+        (or 'scarf 'narf)
+        (* 'barf)))
 
 (defmacro oeval (grammar rule args input)
   `(let ((*stream* ,input))
@@ -644,7 +669,7 @@
          nil))))
 #+nil
 
-(oeval stuff derp () (list 'narf 'barf 'barf 'barf 'narf 'scarf))
+(oeval stuff derp () (list 'scarf 'barf 'barf 'barf))
 
 #+nil
 (defgrammar std ()
