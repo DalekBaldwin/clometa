@@ -29,5 +29,8 @@
   :components
   ((:module :test
             :components ((:file "package")
-                         (:file "clometa-test" :depends-on ("package")))))
+                         (:file "clometa-i-test")
+                         (:file "clometa-c-test"))
+            :serial t
+            ))
   :depends-on (:clometa :stefil :cl-hash-util))
