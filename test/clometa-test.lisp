@@ -8,27 +8,33 @@
 (defparameter *introspect* nil)
 #+nil
 (setf *introspect* t)
+#+nil
+(setf *introspect* nil)
 
 (defmethod clometa.i::dispatch :around (head exp ;;stream store
                                         )
   (when *introspect*
-    (format t "~&(~A>~S~%~S~%"
+    (format t "~&(~A> d ~S~%~A ~S~%"
             (with-output-to-string (s)
               (dotimes (i *depth*)
                 (princ "-" s)))
-            exp
-            (mapcar #'cdr clometa.i::*stream*)))
+            (let ((str (princ-to-string exp)))
+              (subseq str 0 (min 40 (length str))))
+            
+            (mapcar #'cdr clometa.i::*stream*)
+             clometa.i::*store*))
   (let ((*depth* (1+ *depth*)))
     (let ((result
-           (call-next-method)))
+           (multiple-value-list
+            (call-next-method))))
       (when *introspect*
-        (format t "~&<~A~S)~%"
+        (format t "~&<~A~%~A ~S)~%"
                 (with-output-to-string (s)
                   (dotimes (i (1- *depth*))
                     (princ "-" s)))
-                result
-))
-      result)))
+                (first exp)
+                result))
+      (values-list result))))
 #+nil
 (defmethod clometa.i::dispatch :around ((head symbol) exp ;;stream store
                                         )
@@ -39,21 +45,22 @@
 
 (defmethod clometa.i::ometa-eval :around (form)
   (when *introspect*
-    (format t "~&(~A>~S~%"
+    (format t "~&(~A> e ~S~%"
             (with-output-to-string (s)
               (dotimes (i *depth*)
                 (princ "-" s)))
             form))
   (let ((*depth* (1+ *depth*)))
     (let ((result
-           (call-next-method)))
+           (multiple-value-list
+            (call-next-method))))
       (when *introspect*
         (format t "~&<~A~S)~%"
                 (with-output-to-string (s)
                   (dotimes (i (1- *depth*))
                     (princ "-" s)))
                 result))
-      result)))
+      (values-list result))))
 
 
 
@@ -75,7 +82,8 @@
   (spaces (many+ (atom #\space))))
 
 (deftest test-letter ()
-    (is (eql (first (omatch std letter "a1")) #\a)))
+  (is (eql  (omatch std letter "a1")
+             #\a)))
 
 #+nil
 (DESUGAR
@@ -89,8 +97,23 @@
                (-> (list x y)))))
 
 (deftest test-binding ()
-  (is (equal (first (omatch simple-binding start (list 1 2)))
+  (is (equal  (omatch simple-binding start (list 1 2))
                (list 1 2))))
+
+#+nil
+(omatch
+ (ometa
+  (barf (alt* (barf) (anything))))
+ barf
+ "5")
+
+#+nil
+(omatch
+ (ometa
+  (barf (alt* (list (seq* (atom 1) (atom 2)))
+              (list (many (atom 3))))))
+ barf
+ (list 3 3 3 3 3))
 
 (define-ometa simple-binding-apply
   (start (seq*
@@ -102,7 +125,7 @@
           (-> (list x y)))))
 
 (deftest test-binding-apply ()
-    (is (equal (first (omatch simple-binding-apply start (list 1 (list 2 3))))
+  (is (equal  (omatch simple-binding-apply start (list 1 (list 2 3)))
                (list 1 (list 2 3)))))
 
 (define-ometa left-recursion
@@ -120,7 +143,7 @@
            (atom #\3))))
 
 (deftest test-left-recursion ()
-    (is (equal (first (omatch left-recursion start "1+2-3"))
+  (is (equal  (omatch left-recursion start "1+2-3")
                '(sub (add #\1 #\2) #\3))))
 
 (define-ometa direct-left-recursion
@@ -134,12 +157,13 @@
            (atom #\3))))
 
 (deftest test-direct-left-recursion ()
-  (is (equal (first (omatch direct-left-recursion start "1-2-3"))
+  (is (equal  (omatch direct-left-recursion start "1-2-3")
              '((#\1 #\2) #\3))))
 
 (define-ometa empty-1
   (start (list (end)))
-  (end   (~ (anything))))
+  (end   (~ (anything)))
+  (derp (anything)))
 
 (define-ometa empty-2
   (Start (list (list (End))))
@@ -150,14 +174,14 @@
   (Start (list (list (End))))
   (End   (~ (anything))))
 
-(clometa.i::construct-stream (list 1))
+
 
 (deftest test-empty ()
   #+nil
-  (is (clometa.i::success? (omatch empty-1 start '())))
-  (is (clometa.i::failure? (omatch empty-2 start '())))
+  (is (omatch empty-1 end '()))
+  (is (eql clometa.i::*failure-value* (omatch empty-2 start '())))
   #+nil
-  (is (clometa.i::success? (omatch empty-3 start '(())))))
+  (is  (omatch empty-3 start '(()))))
 
 (defun char->number (char)
   (case char
@@ -188,8 +212,35 @@
                    (-> (char->number d))))))
 
 (deftest test-integers ()
-  (is (= (first (omatch integers int "567"))
+  (is (= (omatch integers int "567")
          567)))
+
+(omatch
+ (ometa
+  (derp
+   (list (seq* (anything) (many (atom 'barf))))))
+ derp
+ (list 'narf 'barf))
+
+#+nil
+(omatch
+ (ometa (:<< std)
+  (zchar-range x y
+              (seq* (bind c (anything))
+                    (->? (and (characterp c)
+                              (char<= x c y)))
+                    (-> c)))
+  (zdigit (zchar-range #\0 #\9))
+  (int (alt* (seq* (bind n (int))
+                   (bind d (zdigit))
+                   (-> (+ (* n 10) (char->number d))))
+             (seq* (bind x (foreign (^ digit)))
+                   (-> (char->number x))))))
+ int
+ "5")
+
+#+nil
+(omatch integers int "5")
 
 (define-ometa token (:<< std)
   (letter (alt* (atom #\_)              ; accept underscore
@@ -202,9 +253,9 @@
                 (foreign (^ number)))))
 
 (deftest test-token ()
-  (is (equal (first (omatch token id "hello_Id"))
+  (is (equal  (omatch token id "hello_Id")
              '(#\h #\e #\l #\l #\o #\_ #\I #\d)))
-  (is (equal (first (omatch token number "57.877"))
+  (is (equal  (omatch token number "57.877")
              '(#\5 #\7 #\. #\8 #\7 #\7))))
 
 (define-ometa flat
@@ -227,7 +278,7 @@
          )))
 
 (deftest test-flatten ()
-  (is (equal (first (omatch flat flatten '(1 (2 (3 4) (5 6)) (((7))))))
+  (is (equal  (omatch flat flatten '(1 (2 (3 4) (5 6)) (((7)))))
              '(1 2 3 4 5 6 7))))
 
 (define-ometa toks (:<< std)
