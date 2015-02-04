@@ -19,28 +19,36 @@
 (defun memo-for (symbol)
   (find-symbol (symbol-name symbol) :clometa-memos))
 
+(defun internal-symbol (symbol)
+  (intern (princ-to-string symbol)
+          (or 
+           (find-package "CLOMETA-MEMOS")
+           (make-package "CLOMETA-MEMOS"))))
+
 (defmacro defrule (name grammar (&rest args) &body body)
-  `(define-layered-method ,name
-     :in ,grammar ,args
-     ,(let ((ast (i:omatch ometa-grammar start body)))
-           (i:omatch ast->code start ast))))
+  `(progn
+     (define-layered-function ,name (,@args))
+     (define-layered-method ,name
+       :in ,grammar ,args
+       ,(let ((ast (i:omatch ometa-grammar start body)))
+             (i:omatch ast->code start ast)))))
 
 (defmacro defgrammar (grammar (&optional supergrammar) &rest rules)
+  (loop for rule in rules
+       do (internal-symbol (first rule)))
   `(progn
      (deflayer ,grammar ,(when supergrammar (list supergrammar)))
+     ,@(mapcar (lambda (rule) `(internal-symbol ',(first rule))) rules)
+     ,@(loop for rule in rules
+          collect
+            (let ((internal-symbol (internal-symbol (first rule))))
+              `(defparameter ,internal-symbol
+                 (make-hash-table :test #'eql))))
      ,@(loop for rule in rules
           collect
             (destructuring-bind (name (&rest args) &body body)
                 rule
-              (declare (ignore body))
-              `(define-layered-function ,name (,@args)))
-          collect
-            (destructuring-bind (name (&rest args) &body body)
-                rule
-              `(defrule ,name ,grammar (,@args) ,@body))
-          collect
-            `(defparameter ,(intern (symbol-name (first rule)) :clometa-memos)
-              (make-hash-table :test 'eql)))))
+              `(defrule ,name ,grammar (,@args) ,@body)))))
 
 
 
@@ -49,6 +57,10 @@
   ((bindings
     :accessor bindings
     :initarg :bindings
+    :initform nil)
+   (hoisted-bindings
+    :accessor hoisted-bindings
+    :initarg :hoisted-bindings
     :initform nil
     )
    (form
@@ -133,24 +145,7 @@
                           (i:->? (funcall pred s))
                           (i:-> s)
                           ))
-  (start (i:seq* (list (i:bind derp (i:many (real-clause))))
-                 (i:->  derp)))
-  (real-clause
-   (i:alt*
-    (@or)
-    (@many)
-    (plus)
-    (@neg)
-    (@bind)
-    (@->)
-    (@->?)
-    (@list)
-    (@seq)
-    (@anything)
-    (quotation)
-    (application)
-    (atomic))
-   )
+
 
   (@anything (i:seq* (atom '_)
                      (i:-> (make-instance 'anything-clause))))
@@ -168,15 +163,20 @@
                        (i:-> (make-instance 'application-clause
                               :rule rule
                               :args args))))
-  
   (@or (i:seq* (list (i:seq* (atom 'or)
                              (i:bind clauses
                                (i:many (real-clause)))))
-               (i:-> (make-instance 'or-clause
-                      :bindings (remove-duplicates
-                                 (loop for clause in clauses
-                                      appending (bindings clause)))
-                      :subclauses clauses))))
+               (i:->
+                (let ((sub-bindings (remove-duplicates
+                                                  (loop for clause in clauses
+                                                     appending (hoisted-bindings clause)
+                                                     appending (bindings clause)))))
+                  (loop for clause in clauses
+                       do (setf (hoisted-bindings clause) nil))
+                  (make-instance 'or-clause
+                                 :bindings nil
+                                 :hoisted-bindings sub-bindings
+                                 :subclauses clauses)))))
   (@many (i:seq* (list (i:seq* (atom '*)
                                (i:bind form (real-clause))))
                  (i:-> (make-instance 'many-clause
@@ -192,27 +192,58 @@
   (@bind (i:seq* (list (i:seq* (atom 'bind)
                                (i:bind var (symbol))
                                (i:bind subclause (real-clause))))
-                 (i:-> (make-instance 'bind-clause
-                        :bindings (cons var (bindings subclause))
-                        :var var
-                        :subclause subclause))))
-  (@-> (i:seq* (list (i:seq* (atom '->)
-                             (i:bind form (i:anything))))
+                 (i:->
+                  (let ((hoisted-bindings (remove-duplicates
+                                           (cons var
+                                                 (append (hoisted-bindings subclause)
+                                                         (bindings subclause))))))
+                    (setf (hoisted-bindings subclause) nil)
+                    (make-instance 'bind-clause
+                                   :bindings (list var)
+                                   :hoisted-bindings hoisted-bindings
+                                   :var var
+                                   :subclause subclause)))))
+  (@-> (i:seq* (atom :->)
+               (i:bind form (i:anything))
                (i:-> (make-instance '->-clause
                       :subclause form))))
-  (@->? (i:seq* (list (i:seq* (atom '->?)
-                              (i:bind form (i:anything))))
+  (@->? (i:seq* (atom :->?)
+                (i:bind form (i:anything))
                 (i:-> (make-instance '->?-clause
                        :subclause form))))
   (@list (i:seq* (list (i:seq* (atom 'list)
                                (i:bind subclause (real-clause))))
-                 (i:-> (make-instance 'list-clause
-                        :bindings (bindings subclause)
-                        :subclause subclause))))
+                 (i:->
+                  (let ((sub-bindings (remove-duplicates
+                                       (append (hoisted-bindings subclause)
+                                               (bindings subclause)))))
+                    (setf (hoisted-bindings subclause) nil)
+                    (make-instance 'list-clause
+                                   :bindings nil
+                                   :hoisted-bindings sub-bindings
+                                   :subclause subclause)))))
   (@seq (i:seq* (list (i:seq* (atom 'seq)
                               (i:bind subclauses (i:many (real-clause)))))
                 (i:-> (make-instance 'seq-clause
-                       :subclauses subclauses)))))
+                       :subclauses subclauses))))
+  (real-clause
+   (i:alt*
+    (@or)
+    (@many)
+    (plus)
+    (@neg)
+    (@bind)
+    (@->)
+    (@->?)
+    (@list)
+    (@seq)
+    (@anything)
+    (quotation)
+    (application)
+    (atomic))
+   )
+  (start (i:seq* (list (i:bind derp (i:many (real-clause))))
+                 (i:->  derp))))
 
 #+nil
 (defun wrap-left-recursion (rule body)
@@ -221,7 +252,7 @@
              (if (m-lr? it)
                  (align-flags-for-growing-and-failure ,rule)
                  (let ((,results (m-value it)))
-                   (if (eql (first ,results) *failure-value*)
+                   (if (eql (first ,results) failure-value)
                        (apply #'signal 'match-failure (rest ,results))
                        ,results))))
             (t
@@ -229,7 +260,7 @@
              (multiple-value-bind (,result ,stream ,failed)
                  (handler-case (progn ,@body)
                    (match-failure ()
-                     (values *failure-value* *stream* t)))
+                     (values failure-value *stream* t)))
                (let ((,memo (memo ,rule *stream*)))
                  (memo-add ,rule *stream* (list ,result ,stream)
                            nil (m-lr-detected? ,memo))
@@ -249,46 +280,53 @@
      list-1)
     (t (length>= (rest list-1) (rest list-2)))))
 
-(defun rule-apply (rule args)
+(defun m-value (m) (first m))
+(defun m-lr? (m) (second m))
+(defun m-lr-detected? (m) (third m))
+
+(defun rule-apply (rule args memo)
   (labels ((grow-lr ()
              (multiple-value-bind (result stream failed)
                  (handler-case (apply rule args)
                    (match-failure ()
-                     (values *failure-value* *stream* t)))
-               (let* ((m (memo rule *stream*))
-                      (m-stream (value-stream (m-value m))))
+                     (values failure-value *stream* t)))
+               (let* ((m (gethash *stream* rule))
+                      (m-stream (second (m-value m))))
                  (cond ((or failed
                             (length>= stream m-stream))
                         (values-list (m-value m)))
                        (t
-                        (memo-add rule *stream* (list result stream)
-                                  (m-lr? m) (m-lr-detected? m))
+                        (setf (gethash *stream* memo)
+                              (list (list result stream)
+                                    (m-lr? m) (m-lr-detected? m)))
                         (grow-lr)))))))
     (acond
-      ((memo rule *stream*)
+      ((gethash *stream* memo)
        (cond ((m-lr? it)
-              (memo-add name *stream* (m-value it) nil t)
+              (setf (gethash *stream* memo)
+                    (list (m-value it) nil t))
               (signal 'match-failure))
              (t
               (let ((results (m-value it)))
-                (if (eql (first results) *failure-value*)
+                (if (eql (first results) failure-value)
                     (signal 'match-failure)
                     (values-list results))))))
       (t
-       (memo-add name *stream* (list *failure-value* *stream*) t nil)
+       (setf (gethash *stream* memo)
+             (list (list failure-value *stream*) t nil))
        (multiple-value-bind (result stream failed)
            (handler-case (apply rule args)
              (match-failure ()
-               (values *failure-value* *stream* t)))
-         (let ((m (memo rule *stream*)))
-           (memo-add rule *stream* (list result stream)
-                     nil (m-lr-detected? m))
+               (values failure-value *stream* t)))
+         (let ((m (gethash *stream* memo)))
+           (setf (gethash *stream* memo)
+                 (list (list result stream) nil (m-lr-detected? m)))
            (cond
              (failed (signal 'match-failure))
              ((m-lr-detected? m)
               (multiple-value-bind (result stream)
                   (grow-lr)
-                (if (eql result *failure-value*)
+                (if (eql result failure-value)
                     (signal 'match-failure)
                     (values result stream))))
              (t (values result stream)))))))))
@@ -300,7 +338,7 @@
        (multiple-value-bind (,result ,stream ,failed)
            (handler-case (,rule ,@args)
              (match-failure ()
-               (values *failure-value* *stream* t)))
+               (values failure-value *stream* t)))
          (unless (aand (memo ,rule *stream*)
                        (m-lr-detected? it))
            (reset-memo! old-memo))
@@ -325,65 +363,105 @@
                  (let ((*stream* (rest *stream*)))
                    (multiple-value-bind (,rest-results ,stream)
                        ,(funcall cont)
-                     (values (cons ,item ,rest-results) ,stream)))
+                     (values
+                      (if (eql ,rest-results empty-value)
+                          ,item
+                          ,rest-results)
+                      ,stream)))
                  (signal 'match-failure)))))))
 
 (defmethod generate-code ((clause application-clause))
   (lambda (cont)
-    (with-gensyms (result stream)
-      `(multiple-value-bind (,result ,stream)
-           (rule-apply #',(rule clause) ,@(args clause))
-         (let ((*stream* ,stream))
-           (cons ,result ,(funcall cont)))))))
+    (with-gensyms (old-memo result rest-results stream failed)
+      (let ((memo (internal-symbol (symbol-name (rule clause)))))
+        `(let ((,old-memo (copy-hash-table ,memo)))
+           (multiple-value-bind (,result ,stream ,failed)
+               (handler-case
+                   (rule-apply #',(rule clause) (list ,@(args clause)) ,memo)
+                 (match-failure ()
+                   (values failure-value *stream* t)))
+             (let ((memo-entry (gethash *stream* ,memo)))
+               (unless (and memo-entry
+                            (m-lr-detected? memo-entry))
+                 (setf ,memo ,old-memo))
+               (if ,failed
+                   (signal 'match-failure)
+                   (let ((*stream* ,stream))
+                     (multiple-value-bind (,rest-results ,stream)
+                         ,(funcall cont)
+                       (values
+                        (if (eql ,rest-results empty-value)
+                            ,result
+                            ,rest-results)
+                        ,stream)))))))))))
 
 (defmethod generate-code ((clause or-clause))
   (lambda (cont)
     (with-gensyms (succeeded result rest-results stream block)
-      `(multiple-value-bind (,succeeded ,result ,stream ,@(bindings clause))
-           (block ,block
-             (tagbody
-                ,@(loop for c in (butlast (subclauses clause))
-                     for tag = (gensym "FAIL")
-                     collect
-                       `(return-from ,block
-                          (handler-case
-                              (multiple-value-bind (,result ,stream)
-                                  ,(i:omatch ast->code
-                                             start (list c))
-                                (values
-                                 t
+      (let (#+nil (binding-gensyms (loop for binding in (hoisted-bindings clause)
+                                collect (cons binding (gensym (symbol-name binding))))))
+        `(let (,@(hoisted-bindings clause))
+           (multiple-value-bind (,succeeded
                                  ,result
                                  ,stream
-                                 ,@(mapcar
-                                    (lambda (b)
-                                      (if (member b (bindings c))
-                                          b
-                                          `nil))
-                                    (bindings clause))))
-                            (match-failure ()
-                              (go ,tag))))
-                     collect tag)
-                (return-from ,block
-                  ,(let ((last-clause (car (last (subclauses clause)))))
-                        `(multiple-value-bind (,result ,stream)
-                             ,(i:omatch ast->code
-                                        start (list last-clause))
-                           (values
-                            t
-                            ,result
-                            ,stream
-                            ,@(mapcar
-                               (lambda (b)
-                                 (if (member b (bindings last-clause))
-                                     b
-                                     `nil))
-                               (bindings clause))))))))
-         (if ,succeeded
-             (let ((*stream* ,stream))
-               (multiple-value-bind (,rest-results ,stream)
-                   ,(funcall cont)
-                 (values (append ,result ,rest-results) ,stream)))
-             (signal 'match-failure))))))
+                                 ;;,@(hoisted-bindings clause)
+                                 ;;,@(mapcar #'cdr binding-gensyms)
+                                 )
+               (block ,block
+                 (tagbody
+                    ,@(loop for c in (butlast (subclauses clause))
+                         for tag = (gensym "FAIL")
+                         collect
+                           `(return-from ,block
+                              (handler-case
+                                  (multiple-value-bind (,result ,stream)
+                                      ,(i:omatch ast->code
+                                                 start (list c))
+                                    (values
+                                     t
+                                     ,result
+                                     ,stream
+                                     #+nil
+                                     ,@(mapcar
+                                        (lambda (b)
+                                          (aif (member b (bindings c))
+                                               b
+                                               ;;(cdr (assoc b binding-gensyms))
+                                               `nil))
+                                        (hoisted-bindings clause))))
+                                (match-failure ()
+                                  (go ,tag))))
+                         collect tag)
+                    (return-from ,block
+                      ,(let ((last-clause (car (last (subclauses clause)))))
+                            `(multiple-value-bind (,result ,stream)
+                                 ,(i:omatch ast->code
+                                            start (list last-clause))
+                               (values
+                                t
+                                ,result
+                                ,stream
+                                #+nil
+                                ,@(mapcar
+                                   (lambda (b)
+                                     (if (member b (bindings last-clause))
+                                         b
+                                         ;;(cdr (assoc b binding-gensyms))
+                                         `nil))
+                                   (hoisted-bindings clause))))))))
+             (if ,succeeded
+                 (let ((*stream* ,stream)
+                       #+nil
+                       ,@(loop for pair in binding-gensyms
+                            collect `(,(car pair) ,(cdr pair))))
+                   (multiple-value-bind (,rest-results ,stream)
+                       ,(funcall cont)
+                     (values
+                      (if (eql ,rest-results empty-value)
+                          ,result
+                          ,rest-results)
+                      ,stream)))
+                 (signal 'match-failure))))))))
 
 (defmethod generate-code ((clause many-clause))
   (lambda (cont)
@@ -397,10 +475,9 @@
                                        (list
                                         (subclause clause)))
                           (match-failure ()
-                            (values *failure-value* *stream* t)))
+                            (values failure-value *stream* t)))
                       (cond (,failed
-                             (values (nreverse
-                                      (reduce #'append ,accum)) ,stream))
+                             (values (nreverse ,accum) ,stream))
                             (t
                              (push ,result ,accum)
                              (let ((*stream* ,stream))
@@ -409,7 +486,11 @@
                (,repeat)
              (multiple-value-bind (,rest-results ,stream)
                  ,(funcall cont)
-               (values (append ,result ,rest-results) ,stream))))))))
+               (values
+                (if (eql ,rest-results empty-value)
+                    ,result
+                    ,rest-results)
+                ,stream))))))))
 
 (defmethod generate-code ((clause plus-clause))
   (lambda (cont)
@@ -420,7 +501,8 @@
                        (list (subclause clause)))))
         `(multiple-value-bind (,result ,stream)
              ,subclause-code
-           (let ((,accum ,result))
+           (let ((,accum (list ,result))
+                 (*stream* ,stream))
              (labels ((,repeat ()
                         (multiple-value-bind (,result ,stream ,failed)
                             (handler-case
@@ -429,10 +511,9 @@
                                            (list
                                             (subclause clause)))
                               (match-failure ()
-                                (values *failure-value* *stream* t)))
+                                (values failure-value *stream* t)))
                           (cond (,failed
-                                 (values (nreverse
-                                          (reduce #'append ,accum)) ,stream))
+                                 (values (nreverse ,accum) ,stream))
                                 (t
                                  (push ,result ,accum)
                                  (let ((*stream* ,stream))
@@ -441,18 +522,27 @@
                    (,repeat)
                  (multiple-value-bind (,rest-results ,stream)
                      ,(funcall cont)
-                   (values (append ,result ,rest-results) ,stream))))))))))
+                   (values
+                    (if (eql ,rest-results empty-value)
+                        ,result
+                        ,rest-results)
+                    ,stream))))))))))
 
 (defmethod generate-code ((clause bind-clause))
   (lambda (cont)
-    (with-gensyms (result stream)
-      `(multiple-value-bind (,result ,stream)
-           ,(i:omatch ast->code start (list (subclause clause)))
-         (setf ,(var clause) ,result)
-         (let ((*stream* ,stream))
-           (multiple-value-bind (,rest-results ,stream)
-               ,(funcall cont)
-             (values (cons ,result ,rest-results) ,stream)))))))
+    (with-gensyms (result rest-results stream)
+      `(let (,@(hoisted-bindings clause))
+         (multiple-value-bind (,result ,stream)
+             ,(i:omatch ast->code start (list (subclause clause)))
+           (setf ,(var clause) ,result)
+           (let ((*stream* ,stream))
+             (multiple-value-bind (,rest-results ,stream)
+                 ,(funcall cont)
+               (values
+                (if (eql ,rest-results empty-value)
+                    ,result
+                    ,rest-results)
+                ,stream))))))))
 
 (defmethod generate-code ((clause ->-clause))
   (lambda (cont)
@@ -460,13 +550,25 @@
       `(let ((,result ,(subclause clause)))
          (multiple-value-bind (,rest-results ,stream)
              ,(funcall cont)
-           (values (cons ,result ,rest-results) ,stream))))))
+           (values
+            (if (eql ,rest-results empty-value)
+                ,result
+                ,rest-results)
+            ,stream))))))
 
 (defmethod generate-code ((clause ->?-clause))
   (lambda (cont)
-    `(if ,(subclause clause)
-         ,(funcall cont)
-         (signal 'match-failure))))
+    (with-gensyms (result rest-results stream)
+      `(let ((,result ,(subclause clause)))
+         (if ,result
+             (multiple-value-bind (,rest-results ,stream)
+                 ,(funcall cont)
+               (values
+                (if (eql ,rest-results empty-value)
+                    ,result
+                    ,rest-results)
+                ,stream))
+             (signal 'match-failure))))))
 
 (defmethod generate-code ((clause list-clause))
   (lambda (cont)
@@ -476,35 +578,57 @@
           (signal 'match-failure))
          (t
           (let ((,substream (first *stream*)))
-            (if (listp ,substream)
-                (let ((*stream* ,substream))
-                  (multiple-value-bind (,result ,stream)
-                      ,(i:omatch ast->code start (list (subclause clause)))
-                    (if (endp ,stream)
-                        (multiple-value-bind (,rest-results ,stream)
-                            ,(funcall cont)
-                          (values (cons ,substream ,rest-results) ,stream))
-                        (signal 'match-failure)))))))))))
+            (cond ((listp ,substream)
+                   (let (,@(hoisted-bindings clause))
+                     (multiple-value-bind (,result ,stream)
+                         (let ((*stream* ,substream))
+                           ,(i:omatch ast->code start (list (subclause clause))))
+                       ;; remember, return original list, not list of transformations
+                       (declare (ignore ,result))
+                       (cond ((endp ,stream)
+                              (let ((*stream* (rest *stream*)))
+                                (multiple-value-bind (,rest-results ,stream)
+                                    ,(funcall cont)
+                                  (values
+                                   (if (eql ,rest-results empty-value)
+                                       ,substream
+                                       ,rest-results)
+                                   ,stream))))
+                             (t
+                              (signal 'match-failure))))))
+                  (t
+                   (signal 'match-failure)))))))))
 
 (defmethod generate-code ((clause anything-clause))
   (lambda (cont)
-    (with-gensyms (rest-results stream)
+    (with-gensyms (rest-results stream item)
       `(if (endp *stream*)
            (signal 'match-failure)
-           (multiple-value-bind (,rest-results ,stream)
-               (let ((*stream* (rest *stream*)))
-                 ,(funcall cont))
-             (values (cons (first *stream*) ,rest-results) ,stream))))))
+           (let ((,item (first *stream*))
+                 (*stream* (rest *stream*)))
+             (multiple-value-bind (,rest-results ,stream)
+                 ,(funcall cont)
+               (values
+                (if (eql ,rest-results empty-value)
+                    ,item
+                    ,rest-results)
+                ,stream)))))))
 
 (defmethod generate-code ((clause neg-clause))
   (lambda (cont)
-    (with-gensyms (result stream failed)
+    (with-gensyms (result rest-results stream failed)
       `(multiple-value-bind (,result ,stream ,failed)
            (handler-case ,(i:omatch ast->code start (list (subclause clause)))
              (match-failure ()
-               (values *failure-value* *stream* t)))
+               (values failure-value *stream* t)))
          (if ,failed
-             ,(funcall cont)
+             (multiple-value-bind (,rest-results ,stream)
+                 ,(funcall cont)
+               (values
+                (if (eql ,rest-results empty-value)
+                    ,result
+                    ,rest-results)
+                ,stream))
              (signal 'match-failure))))))
 
 (i:define-ometa ast->code
@@ -525,7 +649,6 @@
     (i:bind s (satisfies (is-a 'atomic-clause)))
     (i:->
      (make-instance 'atomic-clause
-                    :bindings nil
                     :code (generate-code s)))))
   (application
    (i:seq*
@@ -537,9 +660,9 @@
    (i:seq*
     (i:bind s (satisfies (is-a 'or-clause)))
     (i:-> 
-     (let ((bindings (bindings s)))
+     (let ((hoisted-bindings (hoisted-bindings s)))
        (make-instance 'or-clause
-                      :bindings bindings
+                      :bindings hoisted-bindings
                       :code (generate-code s))))))
   (@many
    (i:seq* (i:bind s (satisfies (is-a 'many-clause)))
@@ -607,6 +730,30 @@
        (application)
        (atomic)))
     (i:-> c)))
+  #+nil
+  (proc (i:alt* (i:seq* (i:bind s (real-clause))
+                        (i:bind e (i:~ (i:anything)))
+                        (i:-> (funcall (code s) (lambda () `(values empty-value *stream*)))))
+                (i:seq* (i:bind s (real-clause))
+                        (i:bind r (proc))
+                        (i:-> (funcall (code s)
+                                       (lambda () r))))))
+  
+  ;; use this to deal with internal seqs for list
+  (proc  (i:seq* (i:bind s (real-clause))
+                 (i:alt*
+                  (i:seq*
+                   (i:bind e (i:~ (i:anything)))
+                   (i:-> (funcall (code s) (lambda () `(values empty-value *stream*)))))
+                  (i:seq*
+                   (i:bind r (proc))
+                   (i:-> (funcall (code s)
+                                (lambda () r)))))))
+  (start (i:seq*
+          (list
+           (i:bind result (proc)))
+          (i:-> result)))
+  #+nil
   (start (i:seq*
           (list
            (i:bind conts
@@ -618,7 +765,7 @@
                    conts
                    :from-end t
                    :initial-value
-                   `(values nil *stream*))))))
+                   `(values empty-value *stream*))))))
 
 #+nil
 (reduce (lambda (x y)
@@ -635,15 +782,25 @@
 #+nil
 (print
  (i:omatch ometa-grammar
-         start
-         '((+ 'narf)))
+           start
+           '((derp)))
+ t)
+
+#+nil
+(print
+ (i:omatch
+  (i:ometa
+   (derp (list (i:seq* (i:~ (i:anything))))))
+  derp
+  (list))
  t)
 
 #+nil
 (let ((step1
        (i:omatch ometa-grammar
                      start
-                     '((+ 'barf)))))
+                     '((or (bind x :x))))
+        ))
   (print
    (i:omatch ast->code
              start
@@ -653,11 +810,13 @@
 
 #+nil
 (defgrammar stuff ()
-  (derp ()
-        (or 'scarf 'narf)
-        (* 'barf)))
+  ;;(barf () (derp :x))
+  ;;(derp (x) x)
+  (blarf ()
+         (bind z _)
+         :-> z))
 
-(defmacro oeval (grammar rule args input)
+(defmacro omatch (grammar rule args input)
   `(let ((*stream* ,input))
      (with-active-layers (,grammar)
            (,rule ,@args))
@@ -667,28 +826,27 @@
            (,rule ,@args))
        (match-failure ()
          nil))))
-#+nil
 
-(oeval stuff derp () (list 'scarf 'barf 'barf 'barf))
+#+nil
+(oeval stuff blarf ()
+       (list :x))
 
 #+nil
 (defgrammar std ()
-  (char () 
-        (bind c _)
-        (->? (characterp c))
-        (-> c))
   ;; why bake character-classes into a language when
   ;; its so expressive that adding them is trivial
   (char-range (x y)
               (bind c _)
-              (->? (and (characterp c)
-                        (char<= x c y)))
-              (-> c))
+              :->? (and (characterp c) (char<= x c y))
+              :-> c)
   (letter () (or (char-range #\a #\z)
                  (char-range #\A #\Z)))
   (digit () (char-range #\0 #\9))
-  (number () (+ (digit)))
+  (num () (+ (digit)))
   (spaces () (+  #\space)))
+
+#+nil
+(oeval std letter () (list #\a #\6 #\7))
 
 #+nil
 (defgrammar simple-binding (std)
@@ -731,6 +889,16 @@
   (start (or ((bind x (start))
               (atom #\-)
               (bind y (n))
+              :-> (list x y))
+             (n)))
+  (n (or (atom #\1)
+         (atom #\2)
+         (atom #\3))))
+#+nil
+(defgrammar direct-left-recursion ()
+  (start (or (:<= x (start)
+                  (atom #\-)
+              (let y (n))
               :-> (list x y))
              (n)))
   (n (or (atom #\1)
