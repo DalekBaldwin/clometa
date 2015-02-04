@@ -5,4 +5,7 @@
   (:export
    #:test-all))
 
-(in-package :clometa.i-test)
+(defpackage :clometa.c-test
+  (:use :cl :clometa.c :stefil :cl-hash-util)
+  (:export
+   #:test-all))
