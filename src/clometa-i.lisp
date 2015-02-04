@@ -58,7 +58,8 @@
 
 (defun align-flags-for-growing-and-failure (name)
   (memo-add name *stream* (m-value (memo name *stream*)) nil t)
-  (signal 'match-failure nil *stream* *store*))
+  (signal 'match-failure nil *stream* *store*)
+  )
 
 
 (defun grow-lr (name body)
@@ -115,7 +116,7 @@
            ((find-rule-by-name name *rules* args)
             (init-memo-and-match it name args))
            (t (error "no such rule ~A" name)))))
-    (values (first r) (second r) (append (third r) *store*))))
+    (values (first r) (second r) *store*)))
 
 (defmethod ometa-eval (form)
   (eval form))
@@ -256,18 +257,21 @@
       (if (empty? *stream*)
           (signal 'match-failure nil *stream* *store*)
           (match (car *stream*)
-            ((list pos (guard substream (stream? substream)))
+            ((list _ (guard substream (stream? substream)))
              (multiple-value-match
-                 (let ((*stream* substream))
-                   (interp subprog temprule))
+                 (handler-case
+                     (let ((*stream* substream))
+                       (e list-pattern))
+                   (match-failure ()
+                     (values *failure-value* *stream* *store*)))
                ((_ (guard stream (empty? stream)) store)
                 (values (de-index-list substream)
                         (cdr *stream*)
                         store))
                ((_) (signal 'match-failure nil substream *store*))))
-            ((list pos (satisfies atom))
+            ((list _ (satisfies atom))
              (signal 'match-failure nil *stream* *store*))
-            (oops (error "Stream cell must contain a value: ~A"
+            (_ (error "Stream cell must contain a value: ~A"
                          (car *stream*))))))))
 
 (defun interp (omprog start)
