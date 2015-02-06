@@ -789,13 +789,10 @@
 (defmacro omatch (grammar rule args input)
   `(let ((*stream* ,input))
      (with-active-layers (,grammar)
-           (,rule ,@args))
-     #+nil
-     (handler-case
-         (with-active-layers (,grammar)
-           (,rule ,@args))
-       (match-failure ()
-         nil))))
+       (handler-case
+           (rule-apply #',rule (list ,@args) ,(internal-symbol rule))
+         (match-failure ()
+           (values failure-value *stream*))))))
 
 #+nil
 (oeval stuff blarf ()
