@@ -29,7 +29,8 @@
                            `((,depth ,n) ,(elt s n))))))
     (cond
       ((listp input) (list `((-1 0) ,(list->stream input))))
-      ((stringp input) (string->stream input)))))
+      ((stringp input) (string->stream input))
+      (t (list `((0 0) ,input))))))
 
 (defun andmap (function list &optional accum)
   (acond
@@ -60,6 +61,8 @@
 
 ;; top level should be #'equal to deal with (^ rule from-ometa), right?
 (defparameter *table* (make-hash-table :test #'equal))
+(defun fresh-memo ()
+  (make-hash-table :test #'equal))
 (defun fresh-memo! ()
   (setf *table* (make-hash-table :test #'equal)))
 (defun reset-memo! (to)
