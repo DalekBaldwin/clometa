@@ -176,7 +176,7 @@
                        do (setf (hoisted-bindings clause) nil))
                   (make-instance 'or-clause
                                  :bindings nil
-                                 :hoisted-bindings hoist-bindings
+                                 :hoisted-bindings hoisted-bindings
                                  :subclauses clauses)))))
   (@many (i:seq* (list (i:seq* (atom '*)
                                (i:bind form (real-clause))))
@@ -250,7 +250,7 @@
    )
   (start (i:seq* (list (i:bind clauses (i:many (real-clause))))
                  (i:-> ;;derp
-                  (make-instance 'seq*-clause :subclauses clauses)))))
+                  (list (make-instance 'seq*-clause :subclauses clauses))))))
 
 (defun length>= (list-1 list-2)
   (cond
@@ -270,7 +270,7 @@
                  (handler-case (apply rule args)
                    (match-failure ()
                      (values failure-value *stream* t)))
-               (let* ((m (gethash *stream* rule))
+               (let* ((m (gethash *stream* memo))
                       (m-stream (second (m-value m))))
                  (cond ((or failed
                             (length>= stream m-stream))
@@ -575,16 +575,23 @@
 (defmethod generate-code ((clause seq*-clause))
   (lambda (cont)
     `(let (,@(hoisted-bindings clause))
-       , (labels ((recur-generate (subclauses)
-                    (funcall (generate-code subclause)
-                             (acond
-                               ((rest subclauses)
-                                (lambda ()
-                                  (recur-generate it)))
-                               (t
-                                (lambda ()
-                                  (values empty-value *stream*)))))))
-           (recur-generate (subclauses clause))))))
+       ,(reduce (lambda (x y)
+                  (funcall x (lambda () y)))
+                (mapcar #'generate-code (subclauses clause))
+                :from-end t
+                :initial-value
+                (funcall cont)
+                ;;`(values empty-value *stream*)
+                )
+       #+nil
+       ,(labels ((recur-generate (subclauses)
+                                 (cond
+                                   ((null subclauses)
+                                    cont)
+                                   (t
+                                    (funcall (generate-code (first subclauses))
+                                             (recur-generate (rest subclauses)))))))
+                (recur-generate (subclauses clause))))))
 
 (i:define-ometa ast->code
   (symbol (i:seq* (i:bind s (i:anything))
@@ -672,6 +679,7 @@
    (i:seq*
     (i:bind c
       (i:alt*
+       (@seq*)
        (@or)
        (@many)
        (plus)
@@ -704,6 +712,10 @@
                    (i:bind r (proc))
                    (i:-> (funcall (code s)
                                 (lambda () r)))))))
+  (start (i:seq* (list (i:bind c (real-clause)))
+                 (i:-> (funcall (code c)
+                                (lambda () `(values empty-value *stream*))))))
+  #+nil
   (start (i:seq*
           (list
            (i:bind result (proc)))
@@ -750,11 +762,14 @@
   (list))
  t)
 
+
 #+nil
 (let ((step1
        (i:omatch ometa-grammar
-                     start
-                     '((or (bind x :x))))
+                 start
+                 '((or (bind x :x))
+                   :-> x
+                   ))
         ))
   (print
    (i:omatch ast->code
