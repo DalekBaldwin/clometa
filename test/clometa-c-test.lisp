@@ -23,6 +23,58 @@
 (defgrammar simple-binding ()
   (start ()
          (list
-          (bind x (atom 1))
-          (bind y (atom 2)))
-         (-> (list x y))))
+          (bind x 1)
+          (bind y 2))
+         :-> (list x y)))
+
+(deftest test-simple-binding ()
+  (is (equal (multiple-value-list
+              (omatch simple-binding start () '((1 2))))
+             '((1 2) nil))))
+
+(defgrammar simple-binding-apply ()
+  (start ()
+         (list
+          (bind x _)
+          (bind y (or 3
+                      (start))))
+         :-> (list x y)))
+
+(deftest test-binding-apply ()
+  (is (equal (multiple-value-list
+              (omatch simple-binding-apply start () '((1 (2 3)))))
+             '((1 (2 3)) nil))))
+
+(defgrammar left-recursion ()
+  (start ()
+         (or
+          (seq (bind x (start))
+               #\-
+               (bind y (n))
+               :-> (list 'sub x y))
+          (seq (bind x (start))
+               #\+
+               (bind y (n))
+               :-> (list 'add x y))
+          (n)))
+  (n ()
+     (or #\1 #\2 #\3)))
+
+(deftest test-left-recursion ()
+  (is (equal (multiple-value-list
+              (omatch left-recursion start () (list #\1 #\+ #\2 #\- #\3))
+              '((sub (add #\1 #\2) #\3) nil)))))
+
+(defgrammar direct-left-recursion ()
+  (start ()
+         (or (seq (bind x (start))
+                  #\-
+                  (bind y (n))
+                  :-> (list x y))
+               (n)))
+  (N ()
+     (or #\1 #\2 #\3)))
+
+(deftest test-direct-left-recursion ()
+  (is (equal (omatch direct-left-recursion start () (list #\1 #\- #\2 #\- #\3))
+             '((#\1 #\2) #\3))))
