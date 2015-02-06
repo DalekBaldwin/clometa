@@ -114,7 +114,7 @@
     :accessor subclause
     :initarg :subclause)))
 
-(defclass seq-clause (ometa-clause)
+(defclass seq*-clause (ometa-clause)
   ((subclauses
     :accessor subclauses
     :initarg :subclauses)))
@@ -167,15 +167,16 @@
                              (i:bind clauses
                                (i:many (real-clause)))))
                (i:->
-                (let ((sub-bindings (remove-duplicates
-                                                  (loop for clause in clauses
-                                                     appending (hoisted-bindings clause)
-                                                     appending (bindings clause)))))
+                (let ((hoisted-bindings
+                       (remove-duplicates
+                        (loop for clause in clauses
+                           appending (hoisted-bindings clause)
+                           appending (bindings clause)))))
                   (loop for clause in clauses
                        do (setf (hoisted-bindings clause) nil))
                   (make-instance 'or-clause
                                  :bindings nil
-                                 :hoisted-bindings sub-bindings
+                                 :hoisted-bindings hoist-bindings
                                  :subclauses clauses)))))
   (@many (i:seq* (list (i:seq* (atom '*)
                                (i:bind form (real-clause))))
@@ -193,10 +194,11 @@
                                (i:bind var (symbol))
                                (i:bind subclause (real-clause))))
                  (i:->
-                  (let ((hoisted-bindings (remove-duplicates
-                                           (cons var
-                                                 (append (hoisted-bindings subclause)
-                                                         (bindings subclause))))))
+                  (let ((hoisted-bindings
+                         (remove-duplicates
+                          (cons var
+                                (append (hoisted-bindings subclause)
+                                        (bindings subclause))))))
                     (setf (hoisted-bindings subclause) nil)
                     (make-instance 'bind-clause
                                    :bindings (list var)
@@ -212,19 +214,23 @@
                 (i:-> (make-instance '->?-clause
                        :subclause form))))
   (@list (i:seq* (list (i:seq* (atom 'list)
-                               (i:bind subclause (real-clause))))
+                               (i:bind clauses (i:many (real-clause)))))
                  (i:->
-                  (let ((sub-bindings (remove-duplicates
-                                       (append (hoisted-bindings subclause)
-                                               (bindings subclause)))))
-                    (setf (hoisted-bindings subclause) nil)
+                  (let ((hoisted-bindings
+                         (remove-duplicates
+                          (loop for clause in clauses
+                               appending (hoisted-bindings clause)
+                               appending (bindings clause)))))
+                    (loop for clause in clauses
+                         do (setf (hoisted-bindings clause) nil))
                     (make-instance 'list-clause
                                    :bindings nil
-                                   :hoisted-bindings sub-bindings
-                                   :subclause subclause)))))
+                                   :hoisted-bindings hoisted-bindings
+                                   :subclause
+                                   (make-instance 'seq*-clause :subclauses clauses))))))
   (@seq (i:seq* (list (i:seq* (atom 'seq)
                               (i:bind subclauses (i:many (real-clause)))))
-                (i:-> (make-instance 'seq-clause
+                (i:-> (make-instance 'seq*-clause
                        :subclauses subclauses))))
   (real-clause
    (i:alt*
@@ -242,8 +248,9 @@
     (application)
     (atomic))
    )
-  (start (i:seq* (list (i:bind derp (i:many (real-clause))))
-                 (i:->  derp))))
+  (start (i:seq* (list (i:bind clauses (i:many (real-clause))))
+                 (i:-> ;;derp
+                  (make-instance 'seq*-clause :subclauses clauses)))))
 
 (defun length>= (list-1 list-2)
   (cond
@@ -564,6 +571,20 @@
                     ,rest-results)
                 ,stream))
              (signal 'match-failure))))))
+
+(defmethod generate-code ((clause seq*-clause))
+  (lambda (cont)
+    `(let (,@(hoisted-bindings clause))
+       , (labels ((recur-generate (subclauses)
+                    (funcall (generate-code subclause)
+                             (acond
+                               ((rest subclauses)
+                                (lambda ()
+                                  (recur-generate it)))
+                               (t
+                                (lambda ()
+                                  (values empty-value *stream*)))))))
+           (recur-generate (subclauses clause))))))
 
 (i:define-ometa ast->code
   (symbol (i:seq* (i:bind s (i:anything))
