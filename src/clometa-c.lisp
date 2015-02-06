@@ -245,33 +245,6 @@
   (start (i:seq* (list (i:bind derp (i:many (real-clause))))
                  (i:->  derp))))
 
-#+nil
-(defun wrap-left-recursion (rule body)
-  (with-gensyms (results result stream failed)
-    `(acond ((memo ,rule *stream*)
-             (if (m-lr? it)
-                 (align-flags-for-growing-and-failure ,rule)
-                 (let ((,results (m-value it)))
-                   (if (eql (first ,results) failure-value)
-                       (apply #'signal 'match-failure (rest ,results))
-                       ,results))))
-            (t
-             (init-memo/failure-and-align-flags-for-planting-seed ,rule)
-             (multiple-value-bind (,result ,stream ,failed)
-                 (handler-case (progn ,@body)
-                   (match-failure ()
-                     (values failure-value *stream* t)))
-               (let ((,memo (memo ,rule *stream*)))
-                 (memo-add ,rule *stream* (list ,result ,stream)
-                           nil (m-lr-detected? ,memo))
-                 (cond ((and (m-lr-detected? ,memo)
-                             (not ,failed))
-                        (let ((,reults (grow-lr ,name))))
-                        ))
-                 )
-                 )
-             ,@body))))
-
 (defun length>= (list-1 list-2)
   (cond
     ((endp list-1)
@@ -331,21 +304,6 @@
                     (values result stream))))
              (t (values result stream)))))))))
 
-#+nil
-(defun wrap-memoization (rule args)
-  (with-gensyms (old-memo result stream failed)
-    `(let ((,old-memo (memo-copy)))
-       (multiple-value-bind (,result ,stream ,failed)
-           (handler-case (,rule ,@args)
-             (match-failure ()
-               (values failure-value *stream* t)))
-         (unless (aand (memo ,rule *stream*)
-                       (m-lr-detected? it))
-           (reset-memo! old-memo))
-         (if ,failed
-             (signal 'match-failure)
-             (values ,result ,stream))))))
-
 (defun is-a (class-name)
   (lambda (thing)
     (eql (class-of thing)
@@ -398,70 +356,46 @@
 (defmethod generate-code ((clause or-clause))
   (lambda (cont)
     (with-gensyms (succeeded result rest-results stream block)
-      (let (#+nil (binding-gensyms (loop for binding in (hoisted-bindings clause)
-                                collect (cons binding (gensym (symbol-name binding))))))
-        `(let (,@(hoisted-bindings clause))
-           (multiple-value-bind (,succeeded
-                                 ,result
-                                 ,stream
-                                 ;;,@(hoisted-bindings clause)
-                                 ;;,@(mapcar #'cdr binding-gensyms)
-                                 )
-               (block ,block
-                 (tagbody
-                    ,@(loop for c in (butlast (subclauses clause))
-                         for tag = (gensym "FAIL")
-                         collect
-                           `(return-from ,block
-                              (handler-case
-                                  (multiple-value-bind (,result ,stream)
-                                      ,(i:omatch ast->code
-                                                 start (list c))
-                                    (values
-                                     t
-                                     ,result
-                                     ,stream
-                                     #+nil
-                                     ,@(mapcar
-                                        (lambda (b)
-                                          (aif (member b (bindings c))
-                                               b
-                                               ;;(cdr (assoc b binding-gensyms))
-                                               `nil))
-                                        (hoisted-bindings clause))))
-                                (match-failure ()
-                                  (go ,tag))))
-                         collect tag)
-                    (return-from ,block
-                      ,(let ((last-clause (car (last (subclauses clause)))))
-                            `(multiple-value-bind (,result ,stream)
-                                 ,(i:omatch ast->code
-                                            start (list last-clause))
-                               (values
-                                t
-                                ,result
-                                ,stream
-                                #+nil
-                                ,@(mapcar
-                                   (lambda (b)
-                                     (if (member b (bindings last-clause))
-                                         b
-                                         ;;(cdr (assoc b binding-gensyms))
-                                         `nil))
-                                   (hoisted-bindings clause))))))))
-             (if ,succeeded
-                 (let ((*stream* ,stream)
-                       #+nil
-                       ,@(loop for pair in binding-gensyms
-                            collect `(,(car pair) ,(cdr pair))))
-                   (multiple-value-bind (,rest-results ,stream)
-                       ,(funcall cont)
-                     (values
-                      (if (eql ,rest-results empty-value)
-                          ,result
-                          ,rest-results)
-                      ,stream)))
-                 (signal 'match-failure))))))))
+      `(let (,@(hoisted-bindings clause))
+         (multiple-value-bind (,succeeded
+                               ,result
+                               ,stream)
+             (block ,block
+               (tagbody
+                  ,@(loop for c in (butlast (subclauses clause))
+                       for tag = (gensym "FAIL")
+                       collect
+                         `(return-from ,block
+                            (handler-case
+                                (multiple-value-bind (,result ,stream)
+                                    ,(i:omatch ast->code
+                                               start (list c))
+                                  (values
+                                   t
+                                   ,result
+                                   ,stream))
+                              (match-failure ()
+                                (go ,tag))))
+                       collect tag)
+                  (return-from ,block
+                    ,(let ((last-clause (car (last (subclauses clause)))))
+                          `(multiple-value-bind (,result ,stream)
+                               ,(i:omatch ast->code
+                                          start (list last-clause))
+                             (values
+                              t
+                              ,result
+                              ,stream))))))
+           (if ,succeeded
+               (let ((*stream* ,stream))
+                 (multiple-value-bind (,rest-results ,stream)
+                     ,(funcall cont)
+                   (values
+                    (if (eql ,rest-results empty-value)
+                        ,result
+                        ,rest-results)
+                    ,stream)))
+               (signal 'match-failure)))))))
 
 (defmethod generate-code ((clause many-clause))
   (lambda (cont)
