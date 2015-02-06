@@ -44,4 +44,3 @@
    #:seq))
 
 (add-package-local-nickname :i :clometa.i :clometa.c)
-

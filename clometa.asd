@@ -11,9 +11,9 @@
   ((:static-file "clometa.asd")
    (:module :src
             :components ((:file "package")
-                         (:file "util-i")
-                         (:file "clometa-i")
-                         (:file "clometa-c")
+                         (:file "interpreter-utils")
+                         (:file "interpreter")
+                         (:file "compiler")
                          )
             :serial t))
   :depends-on (:alexandria
@@ -29,8 +29,7 @@
   :components
   ((:module :test
             :components ((:file "package")
-                         (:file "clometa-i-test")
-                         (:file "clometa-c-test"))
-            :serial t
-            ))
+                         (:file "interpreter-test")
+                         (:file "compiler-test"))
+            :serial t))
   :depends-on (:clometa :stefil :cl-hash-util))
