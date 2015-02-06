@@ -32,4 +32,15 @@
    #:->?))
 
 (defpackage :clometa.c
-  (:use :cl :clometa.i :contextl :optima))
+  (:use :cl :contextl :optima :alexandria :anaphora)
+  (:export
+   #:defgrammar
+   #:defrule
+   #:omatch
+   
+   #:_
+   #:~
+   #:bind))
+
+(add-package-local-nickname :i :clometa.i :clometa.c)
+
