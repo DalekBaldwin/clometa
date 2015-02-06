@@ -62,8 +62,8 @@
 
 (deftest test-left-recursion ()
   (is (equal (multiple-value-list
-              (omatch left-recursion start () (list #\1 #\+ #\2 #\- #\3))
-              '((sub (add #\1 #\2) #\3) nil)))))
+              (omatch left-recursion start () (list #\1 #\+ #\2 #\- #\3)))
+             '((sub (add #\1 #\2) #\3) nil))))
 
 (defgrammar direct-left-recursion ()
   (start ()
@@ -76,5 +76,6 @@
      (or #\1 #\2 #\3)))
 
 (deftest test-direct-left-recursion ()
-  (is (equal (omatch direct-left-recursion start () (list #\1 #\- #\2 #\- #\3))
-             '((#\1 #\2) #\3))))
+  (is (equal (multiple-value-list
+              (omatch direct-left-recursion start () (list #\1 #\- #\2 #\- #\3)))
+             '(((#\1 #\2) #\3) nil))))

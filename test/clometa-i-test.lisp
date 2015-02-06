@@ -82,8 +82,8 @@
   (spaces (many+ (atom #\space))))
 
 (deftest test-letter ()
-  (is (eql  (omatch std letter "a1")
-             #\a)))
+  (is (eql (omatch std letter "a1")
+           #\a)))
 
 #+nil
 (DESUGAR
@@ -97,8 +97,8 @@
                (-> (list x y)))))
 
 (deftest test-binding ()
-  (is (equal  (omatch simple-binding start (list 1 2))
-               (list 1 2))))
+  (is (equal (omatch simple-binding start (list 1 2))
+             (list 1 2))))
 
 #+nil
 (omatch
@@ -125,8 +125,8 @@
           (-> (list x y)))))
 
 (deftest test-binding-apply ()
-  (is (equal  (omatch simple-binding-apply start (list 1 (list 2 3)))
-               (list 1 (list 2 3)))))
+  (is (equal (omatch simple-binding-apply start (list 1 (list 2 3)))
+             (list 1 (list 2 3)))))
 
 (define-ometa left-recursion
   (start (alt* (seq* (bind x (start))
@@ -143,8 +143,8 @@
            (atom #\3))))
 
 (deftest test-left-recursion ()
-  (is (equal  (omatch left-recursion start "1+2-3")
-               '(sub (add #\1 #\2) #\3))))
+  (is (equal (omatch left-recursion start "1+2-3")
+             '(sub (add #\1 #\2) #\3))))
 
 (define-ometa direct-left-recursion
   (start (alt* (seq* (bind x (start))
@@ -157,7 +157,7 @@
            (atom #\3))))
 
 (deftest test-direct-left-recursion ()
-  (is (equal  (omatch direct-left-recursion start "1-2-3")
+  (is (equal (omatch direct-left-recursion start "1-2-3")
              '((#\1 #\2) #\3))))
 
 (define-ometa empty-1
@@ -181,7 +181,7 @@
   (is (omatch empty-1 end '()))
   (is (eql clometa.i::*failure-value* (omatch empty-2 start '())))
   #+nil
-  (is  (omatch empty-3 start '(()))))
+  (is (omatch empty-3 start '(()))))
 
 (defun char->number (char)
   (case char
@@ -253,9 +253,9 @@
                 (foreign (^ number)))))
 
 (deftest test-token ()
-  (is (equal  (omatch token id "hello_Id")
+  (is (equal (omatch token id "hello_Id")
              '(#\h #\e #\l #\l #\o #\_ #\I #\d)))
-  (is (equal  (omatch token number "57.877")
+  (is (equal (omatch token number "57.877")
              '(#\5 #\7 #\. #\8 #\7 #\7))))
 
 (define-ometa flat
@@ -278,7 +278,7 @@
          )))
 
 (deftest test-flatten ()
-  (is (equal  (omatch flat flatten '(1 (2 (3 4) (5 6)) (((7)))))
+  (is (equal (omatch flat flatten '(1 (2 (3 4) (5 6)) (((7)))))
              '(1 2 3 4 5 6 7))))
 
 (define-ometa toks (:<< std)
