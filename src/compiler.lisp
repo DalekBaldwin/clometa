@@ -34,7 +34,7 @@
                  rule-memo))))))
 
 (defun memo-copy ()
-  (copy-hash-table *table* :key #'copy-hash-table))
+  (copy-hash-table *memo* :key #'copy-hash-table))
 
 (defun memo-for (symbol)
   (find-symbol (symbol-name symbol) :clometa-memos))
@@ -341,24 +341,22 @@
                     (signal 'match-failure)
                     (values result (memo-entry-stream it)))))))
       (t
-       (memo-add rule *stream* (make-memo-entry :value failure-value
-                                                :stream *stream*
-                                                :lr t
-                                                :lr-detected nil))
-       (multiple-value-bind (result stream failed)
-           (handler-case (apply rule args)
-             (match-failure ()
-               (values failure-value *stream* t)))
-         (let ((m (memo rule *stream*)))
-           (setf (memo-entry-value m) result
-                 (memo-entry-stream m) stream
-                 (memo-entry-lr m) nil)
-           #+nil
-           (memo-add rule *stream* (list result stream)
-                     nil (m-lr-detected? m))
+       (let ((entry
+              (make-memo-entry :value failure-value
+                               :stream *stream*
+                               :lr t
+                               :lr-detected nil)))
+         (memo-add rule *stream* entry)
+         (multiple-value-bind (result stream failed)
+             (handler-case (apply rule args)
+               (match-failure ()
+                 (values failure-value *stream* t)))
+           (setf (memo-entry-value entry) result
+                 (memo-entry-stream entry) stream
+                 (memo-entry-lr entry) nil)
            (cond
              (failed (signal 'match-failure))
-             ((memo-entry-lr-detected m)
+             ((memo-entry-lr-detected entry)
               (multiple-value-bind (result stream)
                   (grow-lr)
                 (if (eql result failure-value)
@@ -390,59 +388,44 @@
                       ,stream)))
                  (signal 'match-failure)))))))
 
-(defun memo-copy ()
-  (copy-hash-table *memo* :key #'copy-hash-table))
-
 (defmethod generate-code ((clause application-clause))
   (lambda (cont)
-    (with-gensyms (rule old-memo result rest-results stream failed)
-      `(let ((,rule ,(rule-form clause))
-             (,old-memo (memo-copy)))
+    (with-gensyms (rule result rest-results stream failed)
+      `(let ((,rule ,(rule-form clause)))
          (multiple-value-bind (,result ,stream ,failed)
              (handler-case
                  (rule-apply ,rule (list ,@(args clause)))
                (match-failure ()
                  (values failure-value *stream* t)))
-           (let ((memo-entry (memo ,rule *stream*)))
-             (unless (and memo-entry
-                          (memo-entry-lr-detected memo-entry))
-               (setf *memo* ,old-memo))
-             (if ,failed
-                 (signal 'match-failure)
-                 (let ((*stream* ,stream))
-                   (multiple-value-bind (,rest-results ,stream)
-                       ,(funcall cont)
-                     (values
-                      (if (eql ,rest-results empty-value)
-                          ,result
-                          ,rest-results)
-                      ,stream))))))))))
+           (if ,failed
+               (signal 'match-failure)
+               (let ((*stream* ,stream))
+                 (multiple-value-bind (,rest-results ,stream)
+                     ,(funcall cont)
+                   (values
+                    (if (eql ,rest-results empty-value)
+                        ,result
+                        ,rest-results)
+                    ,stream)))))))))
 
 (defmethod generate-code ((clause call-clause))
   (lambda (cont)
-    (with-gensyms (old-memo result rest-results stream failed)
-      (let ((memo (internal-symbol (symbol-name (rule clause)))))
-        `(let ((,old-memo (memo-copy)))
-           (multiple-value-bind (,result ,stream ,failed)
-               (handler-case
-                   (rule-apply #',(rule clause) (list ,@(args clause)))
-                 (match-failure ()
-                   (values failure-value *stream* t)))
-             (let ((memo-entry 
-                    (memo #',(rule clause) *stream*)))
-               (unless (and memo-entry
-                            (memo-entry-lr-detected memo-entry))
-                 (setf *memo* ,old-memo))
-               (if ,failed
-                   (signal 'match-failure)
-                   (let ((*stream* ,stream))
-                     (multiple-value-bind (,rest-results ,stream)
-                         ,(funcall cont)
-                       (values
-                        (if (eql ,rest-results empty-value)
-                            ,result
-                            ,rest-results)
-                        ,stream)))))))))))
+    (with-gensyms (result rest-results stream failed)
+      `(multiple-value-bind (,result ,stream ,failed)
+           (handler-case
+               (rule-apply #',(rule clause) (list ,@(args clause)))
+             (match-failure ()
+               (values failure-value *stream* t)))
+         (if ,failed
+             (signal 'match-failure)
+             (let ((*stream* ,stream))
+               (multiple-value-bind (,rest-results ,stream)
+                   ,(funcall cont)
+                 (values
+                  (if (eql ,rest-results empty-value)
+                      ,result
+                      ,rest-results)
+                  ,stream))))))))
 
 (defmethod generate-code ((clause or-clause))
   (lambda (cont)
