@@ -286,6 +286,19 @@
      list-1)
     (t (length>= (rest list-1) (rest list-2)))))
 
+(defun contains-sublist-aux (sublist list)
+  (cond
+    ((endp list)
+     nil)
+    ((eql sublist list)
+     sublist)
+    (t
+     (contains-sublist-aux sublist (rest list)))))
+
+(defun contains-sublist (sublist list)
+  (or (endp sublist)
+      (contains-sublist-aux sublist list)))
+
 (defun m-value (m) (first m))
 (defun m-lr? (m) (second m))
 (defun m-lr-detected? (m) (third m))
@@ -299,7 +312,7 @@
                (let* ((m (memo rule *stream*))
                       (m-stream (second (m-value m))))
                  (cond ((or failed
-                            (length>= stream m-stream))
+                            (contains-sublist m-stream stream))
                         (values-list (m-value m)))
                        (t
                         (memo-add rule *stream*
