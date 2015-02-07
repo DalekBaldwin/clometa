@@ -32,18 +32,31 @@
               (gomatch simple-binding start () '((1 2))))
              '((1 2) nil))))
 
-(defgrammar simple-binding-apply ()
-  (startz ()
+(defgrammar simple-binding-call ()
+  (start ()
          (list
           (bind x _)
-          (bind y (or 3
-                      (startz))))
+          (bind y (or 3 (start))))
          :-> (list x y)))
 
-(deftest test-binding-apply ()
+(deftest test-binding-call ()
   (is (equal (multiple-value-list
-              (gomatch simple-binding-apply startz () '((1 (2 3)))))
+              (gomatch simple-binding-call start () '((1 (2 3)))))
              '((1 (2 3)) nil))))
+
+(defgrammar simple-apply ()
+  (list-of (p)
+           (bind first (apply p))
+           (bind rest (* (seq #\, (apply p))))
+           :-> (cons first rest))
+  (one () #\1)
+  (start ()
+         (list-of #'one)))
+
+(deftest test-simple-apply ()
+  (is (equal (multiple-value-list
+              (gomatch simple-apply start () (list #\1 #\, #\1 #\, #\1)))
+             '((#\1 #\1 #\1) nil))))
 
 (defgrammar left-recursion ()
   (start ()

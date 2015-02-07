@@ -130,6 +130,14 @@
     :accessor subclauses
     :initarg :subclauses)))
 
+(defclass application-clause (ometa-clause)
+  ((rule-form
+    :accessor rule-form
+    :initarg :rule-form)
+   (args
+    :accessor args
+    :initarg :args)))
+
 (defclass call-clause (ometa-clause)
   ((rule
     :accessor rule
@@ -169,8 +177,14 @@
            (i:bind thing (satisfies #'atom))
            (i:-> (make-instance 'atomic-clause
                                 :thing thing))))
-  (call (i:seq* (list (i:seq* (i:bind rule (symbol))
+  (application (i:seq* (list (i:seq* (atom 'apply)
+                                     (i:bind rule-form (i:anything))
                                      (i:bind args (i:many (satisfies #'atom)))))
+                       (i:-> (make-instance 'application-clause
+                              :rule-form rule-form
+                              :args args))))
+  (call (i:seq* (list (i:seq* (i:bind rule (symbol))
+                              (i:bind args (i:many (i:anything)))))
                        (i:-> (make-instance 'call-clause
                               :rule rule
                               :args args))))
@@ -255,6 +269,7 @@
     (@list)
     (@seq)
     (@anything)
+    (application)
     (quotation)
     (call)
     (atomic))
@@ -347,37 +362,43 @@
 (defun memo-copy ()
   (copy-hash-table *memo* :key #'copy-hash-table))
 
-;;; how to differentiate memos for rules with same name in different grammars?
-;;; runtime context?
+(defmethod generate-code ((clause application-clause))
+  (lambda (cont)
+    (with-gensyms (rule old-memo result rest-results stream failed)
+      `(let ((,rule ,(rule-form clause))
+             (,old-memo (memo-copy)))
+         (multiple-value-bind (,result ,stream ,failed)
+             (handler-case
+                 (rule-apply ,rule (list ,@(args clause)))
+               (match-failure ()
+                 (values failure-value *stream* t)))
+           (let ((memo-entry (memo ,rule *stream*)))
+             (unless (and memo-entry
+                          (m-lr-detected? memo-entry))
+               (setf *memo* ,old-memo))
+             (if ,failed
+                 (signal 'match-failure)
+                 (let ((*stream* ,stream))
+                   (multiple-value-bind (,rest-results ,stream)
+                       ,(funcall cont)
+                     (values
+                      (if (eql ,rest-results empty-value)
+                          ,result
+                          ,rest-results)
+                      ,stream))))))))))
+
 (defmethod generate-code ((clause call-clause))
   (lambda (cont)
     (with-gensyms (old-memo result rest-results stream failed)
       (let ((memo (internal-symbol (symbol-name (rule clause)))))
-        `(let ((,old-memo
-                ;;(copy-hash-table ,memo)
-                (memo-copy)))
+        `(let ((,old-memo (memo-copy)))
            (multiple-value-bind (,result ,stream ,failed)
                (handler-case
-                   (rule-apply #',(rule clause) (list ,@(args clause))
-                               ;;,memo
-                               #+nil
-                               (gethash
-                                ;;(list ',*grammar* #',(rule clause))
-                                (sxhash (list ',*grammar* ',(rule clause)))
-                                *memo*
-                                ))
+                   (rule-apply #',(rule clause) (list ,@(args clause)))
                  (match-failure ()
                    (values failure-value *stream* t)))
              (let ((memo-entry 
-                    (memo #',(rule clause) *stream*)
-                     #+nil
-                     (gethash *stream*
-                              (gethash
-                               ;;(list ',*grammar* #',(rule clause))
-                               (sxhash (list ',*grammar* ',(rule clause)))
-                               *memo*)
-                              ;;,memo
-                              )))
+                    (memo #',(rule clause) *stream*)))
                (unless (and memo-entry
                             (m-lr-detected? memo-entry))
                  (setf *memo* ,old-memo))
@@ -644,6 +665,12 @@
     (i:->
      (make-instance 'atomic-clause
                     :code (generate-code s)))))
+  (application
+   (i:seq*
+    (i:bind s (satisfies (is-a 'application-clause)))
+    (i:->
+     (make-instance 'application-clause
+                    :code (generate-code s)))))
   (call
    (i:seq*
     (i:bind s (satisfies (is-a 'call-clause)))
@@ -721,6 +748,7 @@
        (@->?)
        (@->)
        (@list)
+       (application)
        (@anything)
        (call)
        (atomic)))
