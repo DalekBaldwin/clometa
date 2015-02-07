@@ -93,6 +93,40 @@
               (gomatch direct-left-recursion start () (list #\1 #\- #\2 #\- #\3)))
              '(((#\1 #\2) #\3) nil))))
 
+(defgrammar indirect-left-recursion ()
+  (x ()
+     (expr))
+  (expr ()
+        (or (seq
+             (bind butlast (x))
+             #\,
+             (bind last #\1)
+             :-> (append (if (atom butlast)
+                             (list butlast)
+                             butlast)
+                         (list last)))
+            #\1)))
+#+nil
+(deftest test-indirect-left-recursion ()
+  (is (equal (multiple-value-list
+              (gomatch indirect-left-recursion expr ()
+                       (list #\1 #\, #\1 #\, #\1 #\, #\1))))))
+
+#+nil
+(defgrammar factorial ()
+  (fact ((n (eql 0)))
+        :-> 1)
+  (fact (n)
+        (bind m (fact (1- n)))
+        :-> (* n m)))
+
+#+nil
+(defgrammar arg-pat-match ()
+  (char-range ((x char) (y char))
+              ...))
+
+
+
 (defgrammar empty-1 ()
   (start () (list (end)))
   (end () (~ _)))
