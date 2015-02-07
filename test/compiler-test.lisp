@@ -110,7 +110,8 @@
 
 #+nil
 (deftest test-integers ()
-  (is (= (gomatch integers int () "567")
+  (is (= (gomatch integers int () (list #\5 #\6 #\7);;"567"
+                  )
          567)))
 
 (defgrammar token (std)
@@ -141,7 +142,7 @@
            (seq (list (bind xs (inside)))
                 (bind ys (inside))
                 :-> (append xs ys))
-           (seq (bind x (anything))
+           (seq (bind x _)
                 (bind xs (inside))
                 :-> (cons x xs))
            (seq (end)
@@ -151,7 +152,7 @@
        :-> nil))
 #+nil
 (deftest test-flatten ()
-  (is (equal (gomatch flat flatten () '(1 (2 (3 4) (5 6)) (((7)))))
+  (is (equal (gomatch flat flatten () '((1 (2 (3 4) (5 6)) (((7))))))
              '(1 2 3 4 5 6 7))))
 
 (defgrammar toks (std)
