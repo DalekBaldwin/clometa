@@ -309,26 +309,19 @@
   lr-detected)
 
 (defun rule-apply (rule args)
-  (labels ((grow-lr ()
+  (labels ((grow-lr (m)
              (multiple-value-bind (result stream failed)
                  (handler-case (apply rule args)
                    (match-failure ()
                      (values failure-value *stream* t)))
-               (let* ((m (memo rule *stream*))
-                      (m-stream (memo-entry-stream m)))
+               (let ((m-stream (memo-entry-stream m)))
                  (cond ((or failed
                             (contains-sublist m-stream stream))
                         (values (memo-entry-value m) (memo-entry-stream m)))
                        (t
                         (setf (memo-entry-value m) result
                               (memo-entry-stream m) stream)
-                        #+nil
-                        (memo-add rule *stream*
-                                  (make-memo-entry :value result
-                                                   :stream stream
-                                                   :lr (memo-entry-lr m)
-                                                   :lr-detected (memo-entry-lr-detected m)))
-                        (grow-lr)))))))
+                        (grow-lr m)))))))
     (acond
       ((memo rule *stream*)
        (cond ((memo-entry-lr it)
@@ -358,7 +351,7 @@
              (failed (signal 'match-failure))
              ((memo-entry-lr-detected entry)
               (multiple-value-bind (result stream)
-                  (grow-lr)
+                  (grow-lr entry)
                 (if (eql result failure-value)
                     (signal 'match-failure)
                     (values result stream))))
