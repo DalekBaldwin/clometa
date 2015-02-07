@@ -130,7 +130,7 @@
     :accessor subclauses
     :initarg :subclauses)))
 
-(defclass application-clause (ometa-clause)
+(defclass call-clause (ometa-clause)
   ((rule
     :accessor rule
     :initarg :rule)
@@ -169,9 +169,9 @@
            (i:bind thing (satisfies #'atom))
            (i:-> (make-instance 'atomic-clause
                                 :thing thing))))
-  (application (i:seq* (list (i:seq* (i:bind rule (symbol))
+  (call (i:seq* (list (i:seq* (i:bind rule (symbol))
                                      (i:bind args (i:many (satisfies #'atom)))))
-                       (i:-> (make-instance 'application-clause
+                       (i:-> (make-instance 'call-clause
                               :rule rule
                               :args args))))
   (@or (i:seq* (list (i:seq* (atom 'or)
@@ -256,7 +256,7 @@
     (@seq)
     (@anything)
     (quotation)
-    (application)
+    (call)
     (atomic))
    )
   (start (i:seq* (list (i:bind clauses (i:many (real-clause))))
@@ -349,7 +349,7 @@
 
 ;;; how to differentiate memos for rules with same name in different grammars?
 ;;; runtime context?
-(defmethod generate-code ((clause application-clause))
+(defmethod generate-code ((clause call-clause))
   (lambda (cont)
     (with-gensyms (old-memo result rest-results stream failed)
       (let ((memo (internal-symbol (symbol-name (rule clause)))))
@@ -644,11 +644,11 @@
     (i:->
      (make-instance 'atomic-clause
                     :code (generate-code s)))))
-  (application
+  (call
    (i:seq*
-    (i:bind s (satisfies (is-a 'application-clause)))
+    (i:bind s (satisfies (is-a 'call-clause)))
     (i:->
-     (make-instance 'application-clause
+     (make-instance 'call-clause
                     :code (generate-code s)))))
   (@or
    (i:seq*
@@ -722,7 +722,7 @@
        (@->)
        (@list)
        (@anything)
-       (application)
+       (call)
        (atomic)))
     (i:-> c)))
   #+nil
