@@ -23,15 +23,14 @@
     ((gethash (list rule (active-layers)) *memo*)
      (gethash stream it))))
 
-(defun memo-add (rule stream value &optional (lr? nil) (lr-detected? nil))
+(defun memo-add (rule stream entry)
   (let ((key (list rule (active-layers))))
     (acond
       ((gethash key *memo*)
-       (setf (gethash stream it) (list value lr? lr-detected?)))
+       (setf (gethash stream it) entry))
       (t (setf (gethash key *memo*)
                (let ((rule-memo (make-hash-table :test #'eql)))
-                 (setf (gethash stream rule-memo)
-                       (list value lr? lr-detected?))
+                 (setf (gethash stream rule-memo) entry)
                  rule-memo))))))
 
 (defun memo-copy ()
@@ -303,6 +302,12 @@
 (defun m-lr? (m) (second m))
 (defun m-lr-detected? (m) (third m))
 
+(defstruct memo-entry
+  value
+  stream
+  lr
+  lr-detected)
+
 (defun rule-apply (rule args)
   (labels ((grow-lr ()
              (multiple-value-bind (result stream failed)
@@ -310,37 +315,50 @@
                    (match-failure ()
                      (values failure-value *stream* t)))
                (let* ((m (memo rule *stream*))
-                      (m-stream (second (m-value m))))
+                      (m-stream (memo-entry-stream m)))
                  (cond ((or failed
                             (contains-sublist m-stream stream))
-                        (values-list (m-value m)))
+                        (values (memo-entry-value m) (memo-entry-stream m)))
                        (t
+                        (setf (memo-entry-value m) result
+                              (memo-entry-stream m) stream)
+                        #+nil
                         (memo-add rule *stream*
-                                  (list result stream)
-                                  (m-lr? m) (m-lr-detected? m))
+                                  (make-memo-entry :value result
+                                                   :stream stream
+                                                   :lr (memo-entry-lr m)
+                                                   :lr-detected (memo-entry-lr-detected m)))
                         (grow-lr)))))))
     (acond
       ((memo rule *stream*)
-       (cond ((m-lr? it)
-              (memo-add rule *stream* (m-value it) nil t)
+       (cond ((memo-entry-lr it)
+              (setf (memo-entry-lr it) nil
+                    (memo-entry-lr-detected it) t)
               (signal 'match-failure))
              (t
-              (let ((results (m-value it)))
-                (if (eql (first results) failure-value)
+              (let ((result (memo-entry-value it)))
+                (if (eql result failure-value)
                     (signal 'match-failure)
-                    (values-list results))))))
+                    (values result (memo-entry-stream it)))))))
       (t
-       (memo-add rule *stream* (list failure-value *stream*) t nil)
+       (memo-add rule *stream* (make-memo-entry :value failure-value
+                                                :stream *stream*
+                                                :lr t
+                                                :lr-detected nil))
        (multiple-value-bind (result stream failed)
            (handler-case (apply rule args)
              (match-failure ()
                (values failure-value *stream* t)))
          (let ((m (memo rule *stream*)))
+           (setf (memo-entry-value m) result
+                 (memo-entry-stream m) stream
+                 (memo-entry-lr m) nil)
+           #+nil
            (memo-add rule *stream* (list result stream)
                      nil (m-lr-detected? m))
            (cond
              (failed (signal 'match-failure))
-             ((m-lr-detected? m)
+             ((memo-entry-lr-detected m)
               (multiple-value-bind (result stream)
                   (grow-lr)
                 (if (eql result failure-value)
@@ -387,7 +405,7 @@
                  (values failure-value *stream* t)))
            (let ((memo-entry (memo ,rule *stream*)))
              (unless (and memo-entry
-                          (m-lr-detected? memo-entry))
+                          (memo-entry-lr-detected memo-entry))
                (setf *memo* ,old-memo))
              (if ,failed
                  (signal 'match-failure)
@@ -413,7 +431,7 @@
              (let ((memo-entry 
                     (memo #',(rule clause) *stream*)))
                (unless (and memo-entry
-                            (m-lr-detected? memo-entry))
+                            (memo-entry-lr-detected memo-entry))
                  (setf *memo* ,old-memo))
                (if ,failed
                    (signal 'match-failure)
