@@ -16,11 +16,32 @@
 
 (defpackage clometa-memos)
 
+(defparameter *memo* (make-hash-table :test #'equal))
+
+(defun memo (rule stream)
+  (acond
+    ((gethash (list rule (active-layers)) *memo*)
+     (gethash stream it))))
+
+(defun memo-add (rule stream value &optional (lr? nil) (lr-detected? nil))
+  (let ((key (list rule (active-layers))))
+    (acond
+      ((gethash key *memo*)
+       (setf (gethash stream it) (list value lr? lr-detected?)))
+      (t (setf (gethash key *memo*)
+               (let ((rule-memo (make-hash-table :test #'eql)))
+                 (setf (gethash stream rule-memo)
+                       (list value lr? lr-detected?))
+                 rule-memo))))))
+
+(defun memo-copy ()
+  (copy-hash-table *table* :key #'copy-hash-table))
+
 (defun memo-for (symbol)
   (find-symbol (symbol-name symbol) :clometa-memos))
 
-(defun internal-symbol (symbol)
-  (intern (princ-to-string symbol)
+(defun internal-symbol (rule)
+  (intern (princ-to-string rule)
           (or 
            (find-package "CLOMETA-MEMOS")
            (make-package "CLOMETA-MEMOS"))))
@@ -30,28 +51,18 @@
      (define-layered-function ,name (,@args))
      (define-layered-method ,name
        :in ,grammar ,args
-       ,(let ((ast (i:omatch ometa-grammar start body)))
-             (i:omatch ast->code start ast)))))
+       ,(let* ((*grammar* grammar)
+               (ast (i:omatch ometa-grammar start body)))
+              (i:omatch ast->code start ast)))))
 
 (defmacro defgrammar (grammar (&optional supergrammar) &rest rules)
-  (loop for rule in rules
-       do (internal-symbol (first rule)))
   `(progn
      (deflayer ,grammar ,(when supergrammar (list supergrammar)))
-     ,@(mapcar (lambda (rule) `(internal-symbol ',(first rule))) rules)
-     ,@(loop for rule in rules
-          collect
-            (let ((internal-symbol (internal-symbol (first rule))))
-              `(defparameter ,internal-symbol
-                 (make-hash-table :test #'eql))))
      ,@(loop for rule in rules
           collect
             (destructuring-bind (name (&rest args) &body body)
                 rule
               `(defrule ,name ,grammar (,@args) ,@body)))))
-
-
-
 
 (defclass ometa-clause ()
   ((bindings
@@ -264,27 +275,26 @@
 (defun m-lr? (m) (second m))
 (defun m-lr-detected? (m) (third m))
 
-(defun rule-apply (rule args memo)
+(defun rule-apply (rule args)
   (labels ((grow-lr ()
              (multiple-value-bind (result stream failed)
                  (handler-case (apply rule args)
                    (match-failure ()
                      (values failure-value *stream* t)))
-               (let* ((m (gethash *stream* memo))
+               (let* ((m (memo rule *stream*))
                       (m-stream (second (m-value m))))
                  (cond ((or failed
                             (length>= stream m-stream))
                         (values-list (m-value m)))
                        (t
-                        (setf (gethash *stream* memo)
-                              (list (list result stream)
-                                    (m-lr? m) (m-lr-detected? m)))
+                        (memo-add rule *stream*
+                                  (list result stream)
+                                  (m-lr? m) (m-lr-detected? m))
                         (grow-lr)))))))
     (acond
-      ((gethash *stream* memo)
+      ((memo rule *stream*)
        (cond ((m-lr? it)
-              (setf (gethash *stream* memo)
-                    (list (m-value it) nil t))
+              (memo-add rule *stream* (m-value it) nil t)
               (signal 'match-failure))
              (t
               (let ((results (m-value it)))
@@ -292,15 +302,14 @@
                     (signal 'match-failure)
                     (values-list results))))))
       (t
-       (setf (gethash *stream* memo)
-             (list (list failure-value *stream*) t nil))
+       (memo-add rule *stream* (list failure-value *stream*) t nil)
        (multiple-value-bind (result stream failed)
            (handler-case (apply rule args)
              (match-failure ()
                (values failure-value *stream* t)))
-         (let ((m (gethash *stream* memo)))
-           (setf (gethash *stream* memo)
-                 (list (list result stream) nil (m-lr-detected? m)))
+         (let ((m (memo rule *stream*)))
+           (memo-add rule *stream* (list result stream)
+                     nil (m-lr-detected? m))
            (cond
              (failed (signal 'match-failure))
              ((m-lr-detected? m)
@@ -335,20 +344,43 @@
                       ,stream)))
                  (signal 'match-failure)))))))
 
+(defun memo-copy ()
+  (copy-hash-table *memo* :key #'copy-hash-table))
+
+;;; how to differentiate memos for rules with same name in different grammars?
+;;; runtime context?
 (defmethod generate-code ((clause application-clause))
   (lambda (cont)
     (with-gensyms (old-memo result rest-results stream failed)
       (let ((memo (internal-symbol (symbol-name (rule clause)))))
-        `(let ((,old-memo (copy-hash-table ,memo)))
+        `(let ((,old-memo
+                ;;(copy-hash-table ,memo)
+                (memo-copy)))
            (multiple-value-bind (,result ,stream ,failed)
                (handler-case
-                   (rule-apply #',(rule clause) (list ,@(args clause)) ,memo)
+                   (rule-apply #',(rule clause) (list ,@(args clause))
+                               ;;,memo
+                               #+nil
+                               (gethash
+                                ;;(list ',*grammar* #',(rule clause))
+                                (sxhash (list ',*grammar* ',(rule clause)))
+                                *memo*
+                                ))
                  (match-failure ()
                    (values failure-value *stream* t)))
-             (let ((memo-entry (gethash *stream* ,memo)))
+             (let ((memo-entry 
+                    (memo #',(rule clause) *stream*)
+                     #+nil
+                     (gethash *stream*
+                              (gethash
+                               ;;(list ',*grammar* #',(rule clause))
+                               (sxhash (list ',*grammar* ',(rule clause)))
+                               *memo*)
+                              ;;,memo
+                              )))
                (unless (and memo-entry
                             (m-lr-detected? memo-entry))
-                 (setf ,memo ,old-memo))
+                 (setf *memo* ,old-memo))
                (if ,failed
                    (signal 'match-failure)
                    (let ((*stream* ,stream))
@@ -790,9 +822,16 @@
   `(let ((*stream* ,input))
      (with-active-layers (,grammar)
        (handler-case
-           (rule-apply #',rule (list ,@args) ,(internal-symbol rule))
+           (rule-apply #',rule (list ,@args))
          (match-failure ()
            (values failure-value *stream*))))))
+
+(defmacro gomatch (grammar rule args input)
+  `(progn
+     (clrhash *memo*)
+     (loop for symbol being the symbols of :clometa-memos
+          collect symbol)
+     (omatch ,grammar ,rule ,args ,input)))
 
 #+nil
 (oeval stuff blarf ()
