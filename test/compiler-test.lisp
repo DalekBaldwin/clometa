@@ -106,11 +106,12 @@
                              butlast)
                          (list last)))
             #\1)))
-#+nil
+
 (deftest test-indirect-left-recursion ()
   (is (equal (multiple-value-list
               (gomatch indirect-left-recursion expr ()
-                       (list #\1 #\, #\1 #\, #\1 #\, #\1))))))
+                       (list #\1 #\, #\1 #\, #\1 #\, #\1)))
+             '((#\1 #\1 #\1 #\1) nil))))
 
 #+nil
 (defgrammar factorial ()

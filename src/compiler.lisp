@@ -302,14 +302,54 @@
 (defun m-lr? (m) (second m))
 (defun m-lr-detected? (m) (third m))
 
+(defstruct head
+  rule
+  involved-set
+  eval-set)
+
+(defstruct lr
+  seed
+  rule
+  head
+  next)
+
 (defstruct memo-entry
   value
   stream
-  lr
-  lr-detected)
+  lr)
+
+(defparameter *lr-stack* nil)
+(defparameter *heads* (make-hash-table :test #'eql))
 
 (defun rule-apply (rule args)
-  (labels ((grow-lr (m)
+  (labels ((recall ()
+             (let ((m (memo rule *stream*))
+                   (h (gethash *stream* *heads*)))
+               (cond
+                 ((null h)
+                  m)
+                 ((and (null m)
+                       (not (eql rule (head-rule h)))
+                       (not (member rule (head-involved-set h))))
+                  (make-memo-entry :value failure-value
+                                   :stream *stream*
+                                   :lr nil))
+                 ((member rule (head-eval-set h))
+                  (setf (head-eval-set h)
+                        (remove rule (head-eval-set h)))
+                  (multiple-value-bind (result stream)
+                      (handler-case
+                          (apply rule args)
+                        (match-failure ()
+                          (values failure-value *stream*)))
+                    (setf (memo-entry-value m) result
+                          (memo-entry-stream m) stream
+                          (memo-entry-lr m) nil)
+                    m))
+                 (t
+                  m))))
+           (grow-lr (m h)
+             (setf (head-eval-set h) (copy-list (head-involved-set h))) ;; Line B
              (multiple-value-bind (result stream failed)
                  (handler-case (apply rule args)
                    (match-failure ()
@@ -317,45 +357,82 @@
                (let ((m-stream (memo-entry-stream m)))
                  (cond ((or failed
                             (contains-sublist m-stream stream))
+                        (setf (gethash *stream* *heads*) nil) ;; Line C
                         (values (memo-entry-value m) (memo-entry-stream m)))
                        (t
                         (setf (memo-entry-value m) result
-                              (memo-entry-stream m) stream)
-                        (grow-lr m)))))))
-    (acond
-      ((memo rule *stream*)
-       (cond ((memo-entry-lr it)
-              (setf (memo-entry-lr it) nil
-                    (memo-entry-lr-detected it) t)
-              (signal 'match-failure))
+                              (memo-entry-stream m) stream
+                              (memo-entry-lr m) nil)
+                        (grow-lr m h))))))
+           (lr-answer (m)
+             (let ((h (lr-head (memo-entry-lr m)))
+                   (seed (lr-seed (memo-entry-lr m))))
+               (cond
+                 ((eql (head-rule h) rule)
+                  (setf (memo-entry-value m) seed
+                        (memo-entry-lr m) nil)
+                  (cond
+                    ((eql seed failure-value)
+                     (values seed *stream*))
+                    (t
+                     (setf (gethash *stream* *heads*) h)
+                     (grow-lr m h))))
+                 (t
+                  (values seed *stream*)))))
+           (setup-lr (lr)
+             (when (null (lr-head lr))
+               (setf (lr-head lr)
+                     (make-head :rule rule
+                                :involved-set nil
+                                :eval-set nil)))
+             (labels ((process-stack (stack)
+                        (when (and stack
+                                   (not (eql (lr-head stack) (lr-head lr))))
+                          (setf (lr-head stack) (lr-head lr))
+                          (pushnew (lr-rule stack) (head-involved-set (lr-head lr)))
+                          (process-stack (lr-next stack)))))
+               (process-stack *lr-stack*))))
+    (let ((entry (recall)))
+      (cond
+        (entry
+         (let ((*stream* (memo-entry-stream entry)))
+           (acond
+             ((memo-entry-lr entry)
+              (setup-lr it)
+              (if (eql (lr-seed it) failure-value)
+                  (signal 'match-failure)
+                  (values failure-value *stream*)))
              (t
-              (let ((result (memo-entry-value it)))
-                (if (eql result failure-value)
+              (if (eql (memo-entry-value entry) failure-value)
+                  (signal 'match-failure)
+                  (values (memo-entry-value entry) *stream*))))))
+        (t
+         (let* ((lr (make-lr :seed failure-value
+                             :rule rule
+                             :head nil
+                             :next *lr-stack*))
+                (entry
+                 (make-memo-entry :value failure-value
+                                  :stream *stream*
+                                  :lr lr)))
+           (memo-add rule *stream* entry)
+           (multiple-value-bind (result stream failed)
+               (handler-case
+                   (let ((*lr-stack* lr))
+                     (apply rule args))
+                 (match-failure ()
+                   (values failure-value *stream* t)))
+             (setf (memo-entry-stream entry) stream)
+             (cond
+               ((lr-head lr)
+                (setf (lr-seed lr) result)
+                (lr-answer entry))
+               (t
+                (setf (memo-entry-value entry) result
+                      (memo-entry-lr entry) nil)
+                (if failed
                     (signal 'match-failure)
-                    (values result (memo-entry-stream it)))))))
-      (t
-       (let ((entry
-              (make-memo-entry :value failure-value
-                               :stream *stream*
-                               :lr t
-                               :lr-detected nil)))
-         (memo-add rule *stream* entry)
-         (multiple-value-bind (result stream failed)
-             (handler-case (apply rule args)
-               (match-failure ()
-                 (values failure-value *stream* t)))
-           (setf (memo-entry-value entry) result
-                 (memo-entry-stream entry) stream
-                 (memo-entry-lr entry) nil)
-           (cond
-             (failed (signal 'match-failure))
-             ((memo-entry-lr-detected entry)
-              (multiple-value-bind (result stream)
-                  (grow-lr entry)
-                (if (eql result failure-value)
-                    (signal 'match-failure)
-                    (values result stream))))
-             (t (values result stream)))))))))
+                    (values result stream)))))))))))
 
 (defun is-a (class-name)
   (lambda (thing)
