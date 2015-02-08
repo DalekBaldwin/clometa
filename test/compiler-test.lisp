@@ -226,3 +226,22 @@
           (bind b (token '=))
           (bind c (token 'num))
           :-> (concatenate 'string a b c)))
+
+(defgrammar yacc-is-dead-russ-cox ()
+  (start ()
+         (bind stuff (recur))
+         (~ _)
+         :-> stuff)
+  (recur ()
+         (or (seq (bind left (recur))
+                  '+
+                  (bind right (recur))
+                  :-> 
+                  (list left '+ right))
+             'n)))
+
+(deftest test-russ-cox ()
+  (is (not (eql clometa.c::failure-value
+                (gomatch yacc-is-dead-russ-cox start () '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n)))))
+  (is (eql clometa.c::failure-value
+                (gomatch yacc-is-dead-russ-cox start () '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + + n)))))
