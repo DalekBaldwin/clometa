@@ -373,10 +373,12 @@
                         (memo-entry-lr m) nil)
                   (cond
                     ((eql seed failure-value)
-                     (values seed *stream*))
+                     (signal 'match-failure))
                     (t
                      (setf (gethash *stream* *heads*) h)
                      (grow-lr m h))))
+                 ((eql seed failure-value)
+                  (signal 'match-failure))
                  (t
                   (values seed *stream*)))))
            (setup-lr (lr)
