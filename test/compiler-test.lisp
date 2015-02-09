@@ -4,6 +4,17 @@
 
 (defsuite* test-all)
 
+(defun string->list (string)
+  (map 'list #'identity string))
+
+(defun list->string (list)
+  (make-array (list (length list))
+              :element-type 'character
+              :initial-contents list
+              :adjustable nil
+              :fill-pointer nil
+              :displaced-to nil))
+
 (defgrammar std ()
   (char-range (x y)
               (bind c _)
@@ -18,7 +29,7 @@
   (spaces () (+ #\space)))
 
 (deftest test-letter ()
-  (is (equal (multiple-value-list (gomatch std letter () (list #\a #\1)))
+  (is (equal (multiple-value-list (gomatch std letter () (string->list "a1")))
              '(#\a (#\1)))))
 
 (defgrammar simple-binding ()
@@ -56,7 +67,7 @@
 
 (deftest test-simple-apply ()
   (is (equal (multiple-value-list
-              (gomatch simple-apply start () (list #\1 #\, #\1 #\, #\1)))
+              (gomatch simple-apply start () (string->list "1,1,1")))
              '((#\1 #\1 #\1) nil))))
 
 (defgrammar left-recursion ()
@@ -76,7 +87,7 @@
 
 (deftest test-left-recursion ()
   (is (equal (multiple-value-list
-              (gomatch left-recursion start () (list #\1 #\+ #\2 #\- #\3)))
+              (gomatch left-recursion start () (string->list "1+2-3")))
              '((sub (add #\1 #\2) #\3) nil))))
 
 (defgrammar direct-left-recursion ()
@@ -91,7 +102,7 @@
 
 (deftest test-direct-left-recursion ()
   (is (equal (multiple-value-list
-              (gomatch direct-left-recursion start () (list #\1 #\- #\2 #\- #\3)))
+              (gomatch direct-left-recursion start () (string->list "1-2-3")))
              '(((#\1 #\2) #\3) nil))))
 
 (defgrammar indirect-left-recursion ()
@@ -110,8 +121,7 @@
 
 (deftest test-indirect-left-recursion ()
   (is (equal (multiple-value-list
-              (gomatch indirect-left-recursion expr ()
-                       (list #\1 #\, #\1 #\, #\1 #\, #\1)))
+              (gomatch indirect-left-recursion expr () (string->list "1,1,1,1")))
              '((#\1 #\1 #\1 #\1) nil))))
 
 #+nil
@@ -158,8 +168,7 @@
                    :-> (char->number d)))))
 
 (deftest test-integers ()
-  (is (= (gomatch integers int () (list #\5 #\6 #\7);;"567"
-                  )
+  (is (= (gomatch integers int () (string->list "567"))
          567)))
 
 (defgrammar token (std)
@@ -176,12 +185,9 @@
            (next-rule))))
 
 (deftest test-token ()
-  (is (equal (gomatch token id () ;;"hello_Id"
-                      (list #\h #\e #\l #\l #\o #\_ #\I #\d)
-                      )
+  (is (equal (gomatch token id () (string->list "hello_Id"))
              '(#\h #\e #\l #\l #\o #\_ #\I #\d)))
-  (is (equal (gomatch token num () ;;"57.877"
-                      (list #\5 #\7 #\. #\8 #\7 #\7))
+  (is (equal (gomatch token num () (string->list "57.877"))
              '(#\5 #\7 #\. #\8 #\7 #\7))))
 
 (defgrammar flat ()
@@ -210,18 +216,21 @@
   (equ ()
        #\=
        :-> (cl-hash-util:hash-create `((kind =) (value "="))))
-  (num () (bind n (foreign (^ number)))
+  (num () (bind n (next-rule))
        :-> (cl-hash-util:hash-create `((kind num) (value ,(list->string n)))))
   (id ()
-      (bind ls (foreign (^ id token)))
+      (bind ls (foreign token id))
       :-> (cl-hash-util:hash-create `((kind id) (value ,(list->string ls)))))
   (scanner ()
-           (foreign (^ spaces))
+           (spaces)
            (or (equ) (num) (id))))
+
+
+
 
 (defgrammar assignments (toks)
   (token (k)
-         (bind tok (foreign (^ scanner)))
+         (bind tok (scanner))
          :->? (equal (gethash 'kind tok nil) k)
          :-> (gethash 'value tok))
   (assign ()
