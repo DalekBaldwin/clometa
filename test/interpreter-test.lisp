@@ -170,18 +170,12 @@
   (End   (~ (anything))))
 
 
-(define-ometa empty-3
-  (Start (list (list (End))))
-  (End   (~ (anything))))
-
-
-
 (deftest test-empty ()
   #+nil
   (is (omatch empty-1 end '()))
   (is (eql clometa.i::*failure-value* (omatch empty-2 start '())))
   #+nil
-  (is (omatch empty-3 start '(()))))
+  (is (omatch empty-2 start '(()))))
 
 (defun char->number (char)
   (case char
@@ -456,3 +450,4 @@
         derp "a,a")
 #+nil
 (setf *introspect* t)
+
