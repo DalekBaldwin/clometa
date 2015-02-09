@@ -43,6 +43,7 @@
    #:~
    #:bind
    #:seq
-   #:next-rule))
+   #:next-rule
+   #:foreign))
 
 (add-package-local-nickname :i :clometa.i :clometa.c)
