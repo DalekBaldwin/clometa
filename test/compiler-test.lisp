@@ -10,8 +10,9 @@
               :->? (and (characterp c)
                         (char<= x c y))
               :-> c)
-  (letter () (or (char-range #\a #\z)
-              (char-range #\A #\Z)))
+  (letter () (or
+              (char-range #\A #\Z)
+              (char-range #\a #\z)))
   (digit () (char-range #\0 #\9))
   (num () (+ (digit)))
   (spaces () (+ #\space)))
