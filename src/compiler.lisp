@@ -165,6 +165,17 @@
     :accessor args
     :initarg :args)))
 
+(defclass foreign-clause (ometa-clause)
+  ((grammar
+    :accessor grammar
+    :initarg :grammar)
+   (rule
+    :accessor rule
+    :initarg :rule)
+   (args
+    :accessor args
+    :initarg :args)))
+
 (defclass atomic-clause (ometa-clause)
   ((thing
     :accessor thing
@@ -207,6 +218,14 @@
                 (i:-> (make-instance 'call-clause
                                      :rule rule
                                      :args args))))
+  (foreign (i:seq* (list (i:seq* (atom 'foreign)
+                                 (i:bind grammar (symbol))
+                                 (i:bind rule (symbol))
+                                 (i:bind args (i:many (i:anything)))))
+                   (i:-> (make-instance 'foreign-clause
+                                        :grammar grammar
+                                        :rule rule
+                                        :args args))))
   (@or (i:seq* (list (i:seq* (atom 'or)
                              (i:bind clauses
                                (i:many (real-clause)))))
@@ -293,6 +312,7 @@
     (@seq)
     (@anything)
     (next-rule)
+    (foreign)
     (application)
     (quotation)
     (call)
@@ -536,6 +556,26 @@
       `(multiple-value-bind (,result ,stream ,failed)
            (handler-case
                (,(rule clause) ,@(args clause))
+             (match-failure ()
+               (values failure-value *stream* t)))
+         (if ,failed
+             (signal 'match-failure)
+             (let ((*stream* ,stream))
+               (multiple-value-bind (,rest-results ,stream)
+                   ,(funcall cont)
+                 (values
+                  (if (eql ,rest-results empty-value)
+                      ,result
+                      ,rest-results)
+                  ,stream))))))))
+
+(defmethod generate-code ((clause foreign-clause))
+  (lambda (cont)
+    (with-gensyms (result rest-results stream failed)
+      `(multiple-value-bind (,result ,stream ,failed)
+           (handler-case
+               (with-active-layers (,(grammar clause))
+                 (,(rule clause) ,@(args clause)))
              (match-failure ()
                (values failure-value *stream* t)))
          (if ,failed
@@ -819,6 +859,12 @@
     (i:->
      (make-instance 'next-rule-clause
                     :code (generate-code s)))))
+  (foreign
+   (i:seq*
+    (i:bind s (satisfies (is-a 'foreign-clause)))
+    (i:->
+     (make-instance 'foreign-clause
+                    :code (generate-code s)))))
   (@or
    (i:seq*
     (i:bind s (satisfies (is-a 'or-clause)))
@@ -892,6 +938,7 @@
        (@list)
        (next-rule)
        (application)
+       (foreign)
        (@anything)
        (call)
        (atomic)))
@@ -1204,20 +1251,3 @@
                     (? ((atom :&aux)
                         (* (aux))))))
          (-> (list requireds optionals rest keys auxes))))
-
-
-#+nil
-(defgrammar flat ()
-  (flatten () (list (bind xs (inside)))
-           :-> xs)
-  (inside () (or
-              ((list (bind xs (inside)))
-               (bind ys (inside))
-               :-> (append xs ys))
-              ((bind x (anything))
-               (bind xs (inside))
-               :-> (cons x xs))
-              ((end)
-               :-> nil)))
-  (end () (~ (anything))
-       :-> nil))
