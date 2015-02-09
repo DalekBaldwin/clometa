@@ -18,13 +18,13 @@
 
 (defparameter *memo* (make-hash-table :test #'equal))
 
-(defun memo (rule stream)
+(defun memo (rule grammar stream)
   (acond
-    ((gethash (list rule (active-layers)) *memo*)
+    ((gethash (list rule grammar) *memo*)
      (gethash stream it))))
 
-(defun memo-add (rule stream entry)
-  (let ((key (list rule (active-layers))))
+(defun memo-add (rule grammar stream entry)
+  (let ((key (list rule grammar)))
     (acond
       ((gethash key *memo*)
        (setf (gethash stream it) entry))
@@ -50,9 +50,11 @@
      (define-layered-function ,name (,@args))
      (define-layered-method ,name
        :in ,grammar ,args
-       ,(let* ((*grammar* grammar)
-               (ast (i:omatch ometa-grammar start body)))
-              (i:omatch ast->code start ast)))))
+       (rule-apply ',name (list ,@args)
+                   ',grammar
+                   (lambda ()
+                     ,(let ((ast (i:omatch ometa-grammar start body)))
+                           (i:omatch ast->code start ast)))))))
 
 (defmacro defgrammar (grammar (&optional supergrammar) &rest rules)
   `(progn
@@ -145,6 +147,11 @@
     :accessor args
     :initarg :args)))
 
+(defclass next-rule-clause (ometa-clause)
+  ((args
+    :accessor args
+    :initarg :args)))
+
 (defclass atomic-clause (ometa-clause)
   ((thing
     :accessor thing
@@ -180,13 +187,13 @@
                                      (i:bind rule-form (i:anything))
                                      (i:bind args (i:many (satisfies #'atom)))))
                        (i:-> (make-instance 'application-clause
-                              :rule-form rule-form
-                              :args args))))
+                                            :rule-form rule-form
+                                            :args args))))
   (call (i:seq* (list (i:seq* (i:bind rule (symbol))
                               (i:bind args (i:many (i:anything)))))
-                       (i:-> (make-instance 'call-clause
-                              :rule rule
-                              :args args))))
+                (i:-> (make-instance 'call-clause
+                                     :rule rule
+                                     :args args))))
   (@or (i:seq* (list (i:seq* (atom 'or)
                              (i:bind clauses
                                (i:many (real-clause)))))
@@ -197,7 +204,7 @@
                            appending (hoisted-bindings clause)
                            appending (bindings clause)))))
                   (loop for clause in clauses
-                       do (setf (hoisted-bindings clause) nil))
+                     do (setf (hoisted-bindings clause) nil))
                   (make-instance 'or-clause
                                  :bindings nil
                                  :hoisted-bindings hoisted-bindings
@@ -205,15 +212,15 @@
   (@many (i:seq* (list (i:seq* (atom '*)
                                (i:bind form (real-clause))))
                  (i:-> (make-instance 'many-clause
-                        :subclause form))))
+                                      :subclause form))))
   (plus (i:seq* (list (i:seq* (atom '+)
-                               (i:bind form (real-clause))))
-                 (i:-> (make-instance 'plus-clause
-                        :subclause form))))
+                              (i:bind form (real-clause))))
+                (i:-> (make-instance 'plus-clause
+                                     :subclause form))))
   (@neg (i:seq* (list (i:seq* (atom '~)
                               (i:bind form (real-clause))))
                 (i:-> (make-instance 'neg-clause
-                       :subclause form))))
+                                     :subclause form))))
   (@bind (i:seq* (list (i:seq* (atom 'bind)
                                (i:bind var (symbol))
                                (i:bind subclause (real-clause))))
@@ -232,21 +239,21 @@
   (@-> (i:seq* (atom :->)
                (i:bind form (i:anything))
                (i:-> (make-instance '->-clause
-                      :subclause form))))
+                                    :subclause form))))
   (@->? (i:seq* (atom :->?)
                 (i:bind form (i:anything))
                 (i:-> (make-instance '->?-clause
-                       :subclause form))))
+                                     :subclause form))))
   (@list (i:seq* (list (i:seq* (atom 'list)
                                (i:bind clauses (i:many (real-clause)))))
                  (i:->
                   (let ((hoisted-bindings
                          (remove-duplicates
                           (loop for clause in clauses
-                               appending (hoisted-bindings clause)
-                               appending (bindings clause)))))
+                             appending (hoisted-bindings clause)
+                             appending (bindings clause)))))
                     (loop for clause in clauses
-                         do (setf (hoisted-bindings clause) nil))
+                       do (setf (hoisted-bindings clause) nil))
                     (make-instance 'list-clause
                                    :bindings nil
                                    :hoisted-bindings hoisted-bindings
@@ -255,7 +262,11 @@
   (@seq (i:seq* (list (i:seq* (atom 'seq)
                               (i:bind subclauses (i:many (real-clause)))))
                 (i:-> (make-instance 'seq*-clause
-                       :subclauses subclauses))))
+                                     :subclauses subclauses))))
+  (next-rule (i:seq* (list (i:seq* (atom 'next-rule)
+                                   (i:bind args (i:many (i:anything)))))
+                     (i:-> (make-instance 'next-rule-clause
+                                          :args args))))
   (real-clause
    (i:alt*
     (@or)
@@ -268,6 +279,7 @@
     (@list)
     (@seq)
     (@anything)
+    (next-rule)
     (application)
     (quotation)
     (call)
@@ -321,9 +333,9 @@
 (defparameter *lr-stack* nil)
 (defparameter *heads* (make-hash-table :test #'eql))
 
-(defun rule-apply (rule args)
+(defun rule-apply (rule args grammar body-fun)
   (labels ((recall ()
-             (let ((m (memo rule *stream*))
+             (let ((m (memo rule grammar *stream*))
                    (h (gethash *stream* *heads*)))
                (cond
                  ((null h)
@@ -339,7 +351,8 @@
                         (remove rule (head-eval-set h)))
                   (multiple-value-bind (result stream)
                       (handler-case
-                          (apply rule args)
+                          (funcall body-fun)
+                          ;;(apply rule args)
                         (match-failure ()
                           (values failure-value *stream*)))
                     (setf (memo-entry-value m) result
@@ -351,7 +364,9 @@
            (grow-lr (m h)
              (setf (head-eval-set h) (copy-list (head-involved-set h))) ;; Line B
              (multiple-value-bind (result stream failed)
-                 (handler-case (apply rule args)
+                 (handler-case
+                     (funcall body-fun)
+                     ;;(apply rule args)
                    (match-failure ()
                      (values failure-value *stream* t)))
                (let ((m-stream (memo-entry-stream m)))
@@ -417,11 +432,13 @@
                  (make-memo-entry :value failure-value
                                   :stream *stream*
                                   :lr lr)))
-           (memo-add rule *stream* entry)
+           (memo-add rule grammar *stream* entry)
            (multiple-value-bind (result stream failed)
                (handler-case
                    (let ((*lr-stack* lr))
-                     (apply rule args))
+                     (funcall body-fun)
+                     ;;(apply rule args)
+                     )
                  (match-failure ()
                    (values failure-value *stream* t)))
              (setf (memo-entry-stream entry) stream)
@@ -466,7 +483,8 @@
       `(let ((,rule ,(rule-form clause)))
          (multiple-value-bind (,result ,stream ,failed)
              (handler-case
-                 (rule-apply ,rule (list ,@(args clause)))
+                 (apply ,rule
+                        (list ,@(args clause)))
                (match-failure ()
                  (values failure-value *stream* t)))
            (if ,failed
@@ -480,12 +498,31 @@
                         ,rest-results)
                     ,stream)))))))))
 
+(defmethod generate-code ((clause next-rule-clause))
+  (lambda (cont)
+    (with-gensyms (result rest-results stream failed)
+      `(multiple-value-bind (,result ,stream ,failed)
+           (handler-case
+               (call-next-layered-method ,@(args clause))
+             (match-failure ()
+               (values failure-value *stream* t)))
+         (if ,failed
+             (signal 'match-failure)
+             (let ((*stream* ,stream))
+               (multiple-value-bind (,rest-results ,stream)
+                   ,(funcall cont)
+                 (values
+                  (if (eql ,rest-results empty-value)
+                      ,result
+                      ,rest-results)
+                  ,stream))))))))
+
 (defmethod generate-code ((clause call-clause))
   (lambda (cont)
     (with-gensyms (result rest-results stream failed)
       `(multiple-value-bind (,result ,stream ,failed)
            (handler-case
-               (rule-apply #',(rule clause) (list ,@(args clause)))
+               (,(rule clause) ,@(args clause))
              (match-failure ()
                (values failure-value *stream* t)))
          (if ,failed
@@ -763,6 +800,12 @@
     (i:->
      (make-instance 'call-clause
                     :code (generate-code s)))))
+  (next-rule
+   (i:seq*
+    (i:bind s (satisfies (is-a 'next-rule-clause)))
+    (i:->
+     (make-instance 'next-rule-clause
+                    :code (generate-code s)))))
   (@or
    (i:seq*
     (i:bind s (satisfies (is-a 'or-clause)))
@@ -834,6 +877,7 @@
        (@->?)
        (@->)
        (@list)
+       (next-rule)
        (application)
        (@anything)
        (call)
@@ -936,7 +980,8 @@
   `(let ((*stream* ,input))
      (with-active-layers (,grammar)
        (handler-case
-           (rule-apply #',rule (list ,@args))
+           (,rule ,@args)
+           ;;(rule-apply #',rule (list ,@args))
          (match-failure ()
            (values failure-value *stream*))))))
 
@@ -1166,4 +1211,3 @@
                :-> nil)))
   (end () (~ (anything))
        :-> nil))
-
