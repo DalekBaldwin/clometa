@@ -46,15 +46,28 @@
            (make-package "CLOMETA-MEMOS"))))
 
 (defmacro defrule (name grammar (&rest args) &body body)
-  `(progn
-     (define-layered-function ,name (,@args))
-     (define-layered-method ,name
-       :in ,grammar ,args
-       (rule-apply ',name (list ,@args)
-                   ',grammar
-                   (lambda ()
-                     ,(let ((ast (i:omatch ometa-grammar start body)))
-                           (i:omatch ast->code start ast)))))))
+  (with-gensyms (result stream failed old-memo)
+    `(progn
+       (define-layered-function ,name (,@args))
+       (define-layered-method ,name
+         :in ,grammar ,args
+         (let ((,old-memo (memo-copy)))
+           (multiple-value-bind (,result ,stream ,failed)
+               (handler-case
+                   (rule-apply ',name (list ,@args)
+                               ',grammar
+                               (lambda ()
+                                 ,(let ((ast (i:omatch ometa-grammar start body)))
+                                       (i:omatch ast->code start ast))))
+                 (match-failure ()
+                   (values failure-value *stream* t)))
+             (unless (aand (memo ',name ',grammar ,stream)
+                           (memo-entry-lr it))
+               ;; restore memo so same rule can be tried with different args
+               (setf *memo* ,old-memo))
+             (if ,failed
+                 (signal 'match-failure)
+                 (values ,result ,stream))))))))
 
 (defmacro defgrammar (grammar (&optional supergrammar) &rest rules)
   `(progn
