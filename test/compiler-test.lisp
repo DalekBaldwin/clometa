@@ -225,9 +225,6 @@
            (spaces)
            (or (equ) (num) (id))))
 
-
-
-
 (defgrammar assignments (toks)
   (token (k)
          (bind tok (scanner))
@@ -238,6 +235,11 @@
           (bind b (token '=))
           (bind c (token 'num))
           :-> (concatenate 'string a b c)))
+
+(deftest test-assignments ()
+  (is (equal
+       (gomatch assignments assign () (string->list " my_var    = 56"))
+       "my_var=56")))
 
 (defgrammar yacc-is-dead-russ-cox ()
   (start ()
