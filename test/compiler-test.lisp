@@ -151,12 +151,11 @@
 
 (defgrammar integers (std)
   (int () (or (seq (bind n (int))
-                   (bind d (foreign (^ digit)))
+                   (bind d (digit))
                    :-> (+ (* n 10) (char->number d)))
-              (seq (bind d (foreign (^ digit)))
+              (seq (bind d (digit))
                    :-> (char->number d)))))
 
-#+nil
 (deftest test-integers ()
   (is (= (gomatch integers int () (list #\5 #\6 #\7);;"567"
                   )
@@ -165,20 +164,23 @@
 (defgrammar token (std)
   (letter ()
           (or #\_
-              (foreign (^ letter))))
+              (next-rule)))
   (id ()
       (+ (letter)))
   (num ()
-       (or (seq (bind pre (foreign (^ number)))
-                (atom #\.)
-                (bind post (foreign (^ number)))
+       (or (seq (bind pre (next-rule))
+                #\.
+                (bind post (next-rule))
                 :-> `(,@pre #\. ,@post))
-           (foreign (^ number)))))
-#+nil
+           (next-rule))))
+
 (deftest test-token ()
-  (is (equal (gomatch token id () "hello_Id")
+  (is (equal (gomatch token id () ;;"hello_Id"
+                      (list #\h #\e #\l #\l #\o #\_ #\I #\d)
+                      )
              '(#\h #\e #\l #\l #\o #\_ #\I #\d)))
-  (is (equal (gomatch token number () "57.877")
+  (is (equal (gomatch token num () ;;"57.877"
+                      (list #\5 #\7 #\. #\8 #\7 #\7))
              '(#\5 #\7 #\. #\8 #\7 #\7))))
 
 (defgrammar flat ()
