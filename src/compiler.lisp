@@ -16,7 +16,7 @@
 
 (defpackage clometa-memos)
 
-(defparameter *memo* (make-hash-table :test #'equal))
+(defparameter *memo* nil)
 
 (defun memo (rule grammar stream)
   (acond
@@ -986,10 +986,7 @@
            (values failure-value *stream*))))))
 
 (defmacro gomatch (grammar rule args input)
-  `(progn
-     (clrhash *memo*)
-     (loop for symbol being the symbols of :clometa-memos
-          collect symbol)
+  `(let ((*memo* (make-hash-table :test #'equal)))
      (omatch ,grammar ,rule ,args ,input)))
 
 #+nil
