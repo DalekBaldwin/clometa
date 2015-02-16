@@ -57,10 +57,13 @@
                    (rule-apply ',name (list ,@args)
                                ',grammar
                                (lambda ()
-                                 ,(let ((ast (i:omatch ometa-grammar start body)))
-                                       (i:omatch ast->code start ast))))
+                                 ,(let ((ast (clometa.i:omatch ometa-grammar start body)))
+                                       (clometa.i:omatch ast->code start ast))))
                  (match-failure ()
                    (values failure-value *stream* t)))
+             
+             ;; can we unwind-protect instead of explicitly catching signals
+             ;; to do memo bookkeeping?
              (unless (aand (memo ',name ',grammar ,stream)
                            (memo-entry-lr it))
                ;; restore memo so same rule can be tried with different args
@@ -69,9 +72,25 @@
                  (signal 'match-failure)
                  (values ,result ,stream))))))))
 
+
 (defmacro defgrammar (grammar (&optional supergrammar) &rest rules)
   `(progn
      (deflayer ,grammar ,(when supergrammar (list supergrammar)))
+     
+     
+     ;;;;;;;;; to-do!
+     
+     ,@ (let ((rule-alist nil))
+          (loop for rule in rules
+               do (awhen (assoc (first rule) rule-alist)
+                    (push rule (cdr it))
+                    (push (cons (first rule) rule) rule-alist)))
+          (loop for rule-entry in rule-alist
+               collect
+               (let ((rules (cdr rule-entry)))
+                 `(defrule ,(first rule-entry)))
+               )
+          )
      ,@(loop for rule in rules
           collect
             (destructuring-bind (name (&rest args) &body body)
@@ -186,50 +205,50 @@
 
 
 
-(i:define-ometa ometa-grammar
-  (symbol (i:seq* (i:bind s (i:anything))
-                  (i:->? (symbolp s))
-                  (i:-> s)))
-  (satisfies pred (i:seq* (i:bind s (i:anything))
-                          (i:->? (funcall pred s))
-                          (i:-> s)
+(clometa.i:define-ometa ometa-grammar
+  (symbol (clometa.i:seq* (clometa.i:bind s (clometa.i:anything))
+                  (clometa.i:->? (symbolp s))
+                  (clometa.i:-> s)))
+  (satisfies pred (clometa.i:seq* (clometa.i:bind s (clometa.i:anything))
+                          (clometa.i:->? (funcall pred s))
+                          (clometa.i:-> s)
                           ))
 
 
-  (@anything (i:seq* (atom '_)
-                     (i:-> (make-instance 'anything-clause))))
-  (quotation (i:seq*
-              (list (i:seq* (i:bind q (atom 'quote))
-                            (i:bind thing (i:anything))))
-              (i:-> (make-instance 'atomic-clause
+  (@anything (clometa.i:seq* (atom '_)
+                     (clometa.i:-> (make-instance 'anything-clause))))
+  (quotation (clometa.i:seq*
+              (list (clometa.i:seq* (clometa.i:bind q (atom 'quote))
+                            (clometa.i:bind thing (clometa.i:anything))))
+              (clometa.i:-> (make-instance 'atomic-clause
                                    :thing `(quote ,thing)))))
-  (atomic (i:seq*
-           (i:bind thing (satisfies #'atom))
-           (i:-> (make-instance 'atomic-clause
+  (atomic (clometa.i:seq*
+           (clometa.i:bind thing (satisfies #'atom))
+           (clometa.i:-> (make-instance 'atomic-clause
                                 :thing thing))))
-  (application (i:seq* (list (i:seq* (atom 'apply)
-                                     (i:bind rule-form (i:anything))
-                                     (i:bind args (i:many (satisfies #'atom)))))
-                       (i:-> (make-instance 'application-clause
+  (application (clometa.i:seq* (list (clometa.i:seq* (atom 'apply)
+                                     (clometa.i:bind rule-form (clometa.i:anything))
+                                     (clometa.i:bind args (clometa.i:many (satisfies #'atom)))))
+                       (clometa.i:-> (make-instance 'application-clause
                                             :rule-form rule-form
                                             :args args))))
-  (call (i:seq* (list (i:seq* (i:bind rule (symbol))
-                              (i:bind args (i:many (i:anything)))))
-                (i:-> (make-instance 'call-clause
+  (call (clometa.i:seq* (list (clometa.i:seq* (clometa.i:bind rule (symbol))
+                              (clometa.i:bind args (clometa.i:many (clometa.i:anything)))))
+                (clometa.i:-> (make-instance 'call-clause
                                      :rule rule
                                      :args args))))
-  (foreign (i:seq* (list (i:seq* (atom 'foreign)
-                                 (i:bind grammar (symbol))
-                                 (i:bind rule (symbol))
-                                 (i:bind args (i:many (i:anything)))))
-                   (i:-> (make-instance 'foreign-clause
+  (foreign (clometa.i:seq* (list (clometa.i:seq* (atom 'foreign)
+                                 (clometa.i:bind grammar (symbol))
+                                 (clometa.i:bind rule (symbol))
+                                 (clometa.i:bind args (clometa.i:many (clometa.i:anything)))))
+                   (clometa.i:-> (make-instance 'foreign-clause
                                         :grammar grammar
                                         :rule rule
                                         :args args))))
-  (@or (i:seq* (list (i:seq* (atom 'or)
-                             (i:bind clauses
-                               (i:many (real-clause)))))
-               (i:->
+  (@or (clometa.i:seq* (list (clometa.i:seq* (atom 'or)
+                             (clometa.i:bind clauses
+                               (clometa.i:many (real-clause)))))
+               (clometa.i:->
                 (let ((hoisted-bindings
                        (remove-duplicates
                         (loop for clause in clauses
@@ -241,22 +260,22 @@
                                  :bindings nil
                                  :hoisted-bindings hoisted-bindings
                                  :subclauses clauses)))))
-  (@many (i:seq* (list (i:seq* (atom '*)
-                               (i:bind form (real-clause))))
-                 (i:-> (make-instance 'many-clause
+  (@many (clometa.i:seq* (list (clometa.i:seq* (atom '*)
+                               (clometa.i:bind form (real-clause))))
+                 (clometa.i:-> (make-instance 'many-clause
                                       :subclause form))))
-  (plus (i:seq* (list (i:seq* (atom '+)
-                              (i:bind form (real-clause))))
-                (i:-> (make-instance 'plus-clause
+  (plus (clometa.i:seq* (list (clometa.i:seq* (atom '+)
+                              (clometa.i:bind form (real-clause))))
+                (clometa.i:-> (make-instance 'plus-clause
                                      :subclause form))))
-  (@neg (i:seq* (list (i:seq* (atom '~)
-                              (i:bind form (real-clause))))
-                (i:-> (make-instance 'neg-clause
+  (@neg (clometa.i:seq* (list (clometa.i:seq* (atom '~)
+                              (clometa.i:bind form (real-clause))))
+                (clometa.i:-> (make-instance 'neg-clause
                                      :subclause form))))
-  (@bind (i:seq* (list (i:seq* (atom 'bind)
-                               (i:bind var (symbol))
-                               (i:bind subclause (real-clause))))
-                 (i:->
+  (@bind (clometa.i:seq* (list (clometa.i:seq* (atom 'bind)
+                               (clometa.i:bind var (symbol))
+                               (clometa.i:bind subclause (real-clause))))
+                 (clometa.i:->
                   (let ((hoisted-bindings
                          (remove-duplicates
                           (cons var
@@ -268,17 +287,17 @@
                                    :hoisted-bindings hoisted-bindings
                                    :var var
                                    :subclause subclause)))))
-  (@-> (i:seq* (atom :->)
-               (i:bind form (i:anything))
-               (i:-> (make-instance '->-clause
+  (@-> (clometa.i:seq* (atom :->)
+               (clometa.i:bind form (clometa.i:anything))
+               (clometa.i:-> (make-instance '->-clause
                                     :subclause form))))
-  (@->? (i:seq* (atom :->?)
-                (i:bind form (i:anything))
-                (i:-> (make-instance '->?-clause
+  (@->? (clometa.i:seq* (atom :->?)
+                (clometa.i:bind form (clometa.i:anything))
+                (clometa.i:-> (make-instance '->?-clause
                                      :subclause form))))
-  (@list (i:seq* (list (i:seq* (atom 'list)
-                               (i:bind clauses (i:many (real-clause)))))
-                 (i:->
+  (@list (clometa.i:seq* (list (clometa.i:seq* (atom 'list)
+                               (clometa.i:bind clauses (clometa.i:many (real-clause)))))
+                 (clometa.i:->
                   (let ((hoisted-bindings
                          (remove-duplicates
                           (loop for clause in clauses
@@ -291,16 +310,16 @@
                                    :hoisted-bindings hoisted-bindings
                                    :subclause
                                    (make-instance 'seq*-clause :subclauses clauses))))))
-  (@seq (i:seq* (list (i:seq* (atom 'seq)
-                              (i:bind subclauses (i:many (real-clause)))))
-                (i:-> (make-instance 'seq*-clause
+  (@seq (clometa.i:seq* (list (clometa.i:seq* (atom 'seq)
+                              (clometa.i:bind subclauses (clometa.i:many (real-clause)))))
+                (clometa.i:-> (make-instance 'seq*-clause
                                      :subclauses subclauses))))
-  (next-rule (i:seq* (list (i:seq* (atom 'next-rule)
-                                   (i:bind args (i:many (i:anything)))))
-                     (i:-> (make-instance 'next-rule-clause
+  (next-rule (clometa.i:seq* (list (clometa.i:seq* (atom 'next-rule)
+                                   (clometa.i:bind args (clometa.i:many (clometa.i:anything)))))
+                     (clometa.i:-> (make-instance 'next-rule-clause
                                           :args args))))
   (real-clause
-   (i:alt*
+   (clometa.i:alt*
     (@or)
     (@many)
     (plus)
@@ -318,8 +337,8 @@
     (call)
     (atomic))
    )
-  (start (i:seq* (list (i:bind clauses (i:many (real-clause))))
-                 (i:-> ;;derp
+  (start (clometa.i:seq* (list (clometa.i:bind clauses (clometa.i:many (real-clause))))
+                 (clometa.i:-> ;;derp
                   (list (make-instance 'seq*-clause :subclauses clauses))))))
 
 (defun length>= (list-1 list-2)
@@ -604,7 +623,7 @@
                          `(return-from ,block
                             (handler-case
                                 (multiple-value-bind (,result ,stream)
-                                    ,(i:omatch ast->code
+                                    ,(clometa.i:omatch ast->code
                                                start (list c))
                                   (values
                                    t
@@ -616,7 +635,7 @@
                   (return-from ,block
                     ,(let ((last-clause (car (last (subclauses clause)))))
                           `(multiple-value-bind (,result ,stream)
-                               ,(i:omatch ast->code
+                               ,(clometa.i:omatch ast->code
                                           start (list last-clause))
                              (values
                               t
@@ -640,7 +659,7 @@
          (labels ((,repeat ()
                     (multiple-value-bind (,result ,stream ,failed)
                         (handler-case
-                            ,(i:omatch ast->code
+                            ,(clometa.i:omatch ast->code
                                        start
                                        (list
                                         (subclause clause)))
@@ -666,7 +685,7 @@
   (lambda (cont)
     (with-gensyms (accum result rest-results stream failed repeat)
       (let ((subclause-code
-             (i:omatch ast->code
+             (clometa.i:omatch ast->code
                        start
                        (list (subclause clause)))))
         `(multiple-value-bind (,result ,stream)
@@ -676,7 +695,7 @@
              (labels ((,repeat ()
                         (multiple-value-bind (,result ,stream ,failed)
                             (handler-case
-                                ,(i:omatch ast->code
+                                ,(clometa.i:omatch ast->code
                                            start
                                            (list
                                             (subclause clause)))
@@ -703,7 +722,7 @@
     (with-gensyms (result rest-results stream)
       `(let (,@(hoisted-bindings clause))
          (multiple-value-bind (,result ,stream)
-             ,(i:omatch ast->code start (list (subclause clause)))
+             ,(clometa.i:omatch ast->code start (list (subclause clause)))
            (setf ,(var clause) ,result)
            (let ((*stream* ,stream))
              (multiple-value-bind (,rest-results ,stream)
@@ -752,7 +771,7 @@
                    (let (,@(hoisted-bindings clause))
                      (multiple-value-bind (,result ,stream)
                          (let ((*stream* ,substream))
-                           ,(i:omatch ast->code start (list (subclause clause))))
+                           ,(clometa.i:omatch ast->code start (list (subclause clause))))
                        ;; remember, return original list, not list of transformations
                        (declare (ignore ,result))
                        (cond ((endp ,stream)
@@ -788,7 +807,7 @@
   (lambda (cont)
     (with-gensyms (result rest-results stream failed)
       `(multiple-value-bind (,result ,stream ,failed)
-           (handler-case ,(i:omatch ast->code start (list (subclause clause)))
+           (handler-case ,(clometa.i:omatch ast->code start (list (subclause clause)))
              (match-failure ()
                (values failure-value *stream* t)))
          (if ,failed
@@ -822,110 +841,110 @@
                                              (recur-generate (rest subclauses)))))))
                 (recur-generate (subclauses clause))))))
 
-(i:define-ometa ast->code
-  (symbol (i:seq* (i:bind s (i:anything))
-                  (i:->? (symbolp s))
-                  (i:-> s)))
+(clometa.i:define-ometa ast->code
+  (symbol (clometa.i:seq* (clometa.i:bind s (clometa.i:anything))
+                  (clometa.i:->? (symbolp s))
+                  (clometa.i:-> s)))
   (struct kind
-          (i:seq* (i:bind s (i:anything))
-                  (i:->? (and (ometa-clause-p s)
+          (clometa.i:seq* (clometa.i:bind s (clometa.i:anything))
+                  (clometa.i:->? (and (ometa-clause-p s)
                               (or (null kind)
                                   (eql (ometa-clause-kind s) kind))))
-                  (i:-> s)))
-  (satisfies pred (i:seq* (i:bind s (i:anything))
-                          (i:->? (funcall pred s))
-                          (i:-> s)))
+                  (clometa.i:-> s)))
+  (satisfies pred (clometa.i:seq* (clometa.i:bind s (clometa.i:anything))
+                          (clometa.i:->? (funcall pred s))
+                          (clometa.i:-> s)))
   (atomic
-   (i:seq*
-    (i:bind s (satisfies (is-a 'atomic-clause)))
-    (i:->
+   (clometa.i:seq*
+    (clometa.i:bind s (satisfies (is-a 'atomic-clause)))
+    (clometa.i:->
      (make-instance 'atomic-clause
                     :code (generate-code s)))))
   (application
-   (i:seq*
-    (i:bind s (satisfies (is-a 'application-clause)))
-    (i:->
+   (clometa.i:seq*
+    (clometa.i:bind s (satisfies (is-a 'application-clause)))
+    (clometa.i:->
      (make-instance 'application-clause
                     :code (generate-code s)))))
   (call
-   (i:seq*
-    (i:bind s (satisfies (is-a 'call-clause)))
-    (i:->
+   (clometa.i:seq*
+    (clometa.i:bind s (satisfies (is-a 'call-clause)))
+    (clometa.i:->
      (make-instance 'call-clause
                     :code (generate-code s)))))
   (next-rule
-   (i:seq*
-    (i:bind s (satisfies (is-a 'next-rule-clause)))
-    (i:->
+   (clometa.i:seq*
+    (clometa.i:bind s (satisfies (is-a 'next-rule-clause)))
+    (clometa.i:->
      (make-instance 'next-rule-clause
                     :code (generate-code s)))))
   (foreign
-   (i:seq*
-    (i:bind s (satisfies (is-a 'foreign-clause)))
-    (i:->
+   (clometa.i:seq*
+    (clometa.i:bind s (satisfies (is-a 'foreign-clause)))
+    (clometa.i:->
      (make-instance 'foreign-clause
                     :code (generate-code s)))))
   (@or
-   (i:seq*
-    (i:bind s (satisfies (is-a 'or-clause)))
-    (i:-> 
+   (clometa.i:seq*
+    (clometa.i:bind s (satisfies (is-a 'or-clause)))
+    (clometa.i:-> 
      (let ((hoisted-bindings (hoisted-bindings s)))
        (make-instance 'or-clause
                       :bindings hoisted-bindings
                       :code (generate-code s))))))
   (@many
-   (i:seq* (i:bind s (satisfies (is-a 'many-clause)))
-           (i:-> 
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'many-clause)))
+           (clometa.i:-> 
             (make-instance 'many-clause
                            :code (generate-code s)))))
   (plus
-   (i:seq* (i:bind s (satisfies (is-a 'plus-clause)))
-           (i:-> 
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'plus-clause)))
+           (clometa.i:-> 
             (make-instance 'many-clause
                            :code (generate-code s)))))
   (@some)
   (@neg
-   (i:seq* (i:bind s (satisfies (is-a 'neg-clause)))
-           (i:-> 
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'neg-clause)))
+           (clometa.i:-> 
             (make-instance 'neg-clause
                            :code (generate-code s)))))
   (@bind
-      (i:seq* (i:bind s (satisfies (is-a 'bind-clause)))
-              (i:-> 
+      (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'bind-clause)))
+              (clometa.i:-> 
                (make-instance 'bind-clause
                               :code (generate-code s)
                               )
                ;;(ometa-clause-form s)
                )))
   (@->
-   (i:seq* (i:bind s (satisfies (is-a '->-clause)))
-           (i:-> 
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a '->-clause)))
+           (clometa.i:-> 
             (make-instance '->-clause
                            :code (generate-code s)))))
   (@->?
-   (i:seq* (i:bind s (satisfies (is-a '->?-clause)))
-           (i:-> 
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a '->?-clause)))
+           (clometa.i:-> 
             (make-instance '->?-clause
                            :code (generate-code s)))))
   (@list
-   (i:seq* (i:bind s (satisfies (is-a 'list-clause)))
-           (i:-> 
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'list-clause)))
+           (clometa.i:-> 
             (make-instance 'list-clause
                            :code (generate-code s)))))
   (@seq*
-   (i:seq* (i:bind s (satisfies (is-a 'seq*-clause)))
-           (i:-> 
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'seq*-clause)))
+           (clometa.i:-> 
             (make-instance 'seq*-clause
                            :code (generate-code s)))))
   (@anything
-   (i:seq* (i:bind s (satisfies (is-a 'anything-clause)))
-           (i:->
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'anything-clause)))
+           (clometa.i:->
             (make-instance 'anything-clause
                            :code (generate-code s)))))
   (real-clause
-   (i:seq*
-    (i:bind c
-      (i:alt*
+   (clometa.i:seq*
+    (clometa.i:bind c
+      (clometa.i:alt*
        (@seq*)
        (@or)
        (@many)
@@ -942,41 +961,41 @@
        (@anything)
        (call)
        (atomic)))
-    (i:-> c)))
+    (clometa.i:-> c)))
   #+nil
-  (proc (i:alt* (i:seq* (i:bind s (real-clause))
-                        (i:bind e (i:~ (i:anything)))
-                        (i:-> (funcall (code s) (lambda () `(values empty-value *stream*)))))
-                (i:seq* (i:bind s (real-clause))
-                        (i:bind r (proc))
-                        (i:-> (funcall (code s)
+  (proc (clometa.i:alt* (clometa.i:seq* (clometa.i:bind s (real-clause))
+                        (clometa.i:bind e (clometa.i:~ (clometa.i:anything)))
+                        (clometa.i:-> (funcall (code s) (lambda () `(values empty-value *stream*)))))
+                (clometa.i:seq* (clometa.i:bind s (real-clause))
+                        (clometa.i:bind r (proc))
+                        (clometa.i:-> (funcall (code s)
                                        (lambda () r))))))
   
   ;; use this to deal with internal seqs for list
-  (proc  (i:seq* (i:bind s (real-clause))
-                 (i:alt*
-                  (i:seq*
-                   (i:bind e (i:~ (i:anything)))
-                   (i:-> (funcall (code s) (lambda () `(values empty-value *stream*)))))
-                  (i:seq*
-                   (i:bind r (proc))
-                   (i:-> (funcall (code s)
+  (proc  (clometa.i:seq* (clometa.i:bind s (real-clause))
+                 (clometa.i:alt*
+                  (clometa.i:seq*
+                   (clometa.i:bind e (clometa.i:~ (clometa.i:anything)))
+                   (clometa.i:-> (funcall (code s) (lambda () `(values empty-value *stream*)))))
+                  (clometa.i:seq*
+                   (clometa.i:bind r (proc))
+                   (clometa.i:-> (funcall (code s)
                                 (lambda () r)))))))
-  (start (i:seq* (list (i:bind c (real-clause)))
-                 (i:-> (funcall (code c)
+  (start (clometa.i:seq* (list (clometa.i:bind c (real-clause)))
+                 (clometa.i:-> (funcall (code c)
                                 (lambda () `(values empty-value *stream*))))))
   #+nil
-  (start (i:seq*
+  (start (clometa.i:seq*
           (list
-           (i:bind result (proc)))
-          (i:-> result)))
+           (clometa.i:bind result (proc)))
+          (clometa.i:-> result)))
   #+nil
-  (start (i:seq*
+  (start (clometa.i:seq*
           (list
-           (i:bind conts
-             (i:many (i:seq* (i:bind s (real-clause))
-                             (i:-> (code s))))))
-          (i:-> 
+           (clometa.i:bind conts
+             (clometa.i:many (clometa.i:seq* (clometa.i:bind s (real-clause))
+                             (clometa.i:-> (code s))))))
+          (clometa.i:-> 
            (reduce (lambda (x y)
                      (funcall x (lambda () y)))
                    conts
@@ -998,16 +1017,16 @@
 
 #+nil
 (print
- (i:omatch ometa-grammar
+ (clometa.i:omatch ometa-grammar
            start
            '((derp)))
  t)
 
 #+nil
 (print
- (i:omatch
-  (i:ometa
-   (derp (list (i:seq* (i:~ (i:anything))))))
+ (clometa.i:omatch
+  (clometa.i:ometa
+   (derp (list (clometa.i:seq* (clometa.i:~ (clometa.i:anything))))))
   derp
   (list))
  t)
@@ -1015,14 +1034,14 @@
 
 #+nil
 (let ((step1
-       (i:omatch ometa-grammar
+       (clometa.i:omatch ometa-grammar
                  start
                  '((or (bind x :x))
                    :-> x
                    ))
         ))
   (print
-   (i:omatch ast->code
+   (clometa.i:omatch ast->code
              start
              step1
              ;;(list  (make-ometa-clause :kind :eql :bindings nil :form '(or (bind x (eql :x)))))
