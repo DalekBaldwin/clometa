@@ -3,7 +3,7 @@ language: common-lisp
 env:
   matrix:
     - LISP=abcl
-    - LISP=allegro
+#    - LISP=allegro # heap limit exceeded
     - LISP=sbcl
     - LISP=sbcl32
     - LISP=ccl
