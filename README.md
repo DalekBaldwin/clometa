@@ -10,7 +10,7 @@ Using a Lispy, parenful syntax causes some tension in trying to bridge the world
 
 To better indicate the boundaries between OMeta expressions and plain Lisp expressions, semantic actions are preceded by keywords `:->?` and `:->` (instead of being wrapped in s-expressions with `->?` and `->` as the head):
 
-```
+```lisp
 (defgrammar grammar (supergrammar)
   (rule (arg1 arg2)
         ;; CLOMeta code
@@ -24,7 +24,7 @@ To better indicate the boundaries between OMeta expressions and plain Lisp expre
 
 ## Operations
 
-```
+```lisp
 (~ exp) ;; negation - does not consume input
 (bind var exp)
 (seq exp ...) ;; sequence - returns result of final expression
