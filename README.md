@@ -1,5 +1,7 @@
 # CLOMeta
 
+[![Build Status](https://travis-ci.org/DalekBaldwin/clometa.svg?branch=master)](https://travis-ci.org/DalekBaldwin/clometa)
+
 This repository contains a non-fully-featured OMeta interpreter based on [Vlad Kozin's implementation in Racket](https://github.com/vkz/ometa-racket), and an almost-complete CLOMeta compiler bootstrapped from that interpreter. This is not an OMeta implementation in Common Lisp. If it were, it would be called `cl-ometa`, but instead it's a non-hyphenated `clometa`. It's still in the feel-out-the-proper-shape-of-the-code-as-I-write-it phase, so what follows is more of an explanation of design choices so far than proper documentation.
 
 ## Syntax
