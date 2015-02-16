@@ -209,6 +209,7 @@
   (is (= (omatch integers int "567")
          567)))
 
+#+nil
 (omatch
  (ometa
   (derp
