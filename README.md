@@ -6,7 +6,7 @@ This repository contains a non-fully-featured OMeta interpreter based on [Vlad K
 
 Most OMeta implementations seem to copy the syntax of OMeta/JS, requiring grammars to be written in separate files or as strings that are preprocessed (perhaps by the OMeta implementation itself). CLOMeta is embedded as a DSL. This allows for a straightforward mapping onto ContextL: grammars are context layers, and rules are methods specialized in those layers. Using `(next-rule)` within a rule translates straightforwardly into a call to `call-next-layered-method`. Also, there's no need for grammars to have instance variables - the programmer can manage state more flexibly using the surrounding namespace.
 
-Using a Lispy, parenful syntax causes some tension in trying to bridge the worlds of parsing and pattern matching. In Lispy pattern-matching, parentheses visually indicate the a static *structural* pattern you want to match. But in early parsing phases like tokenization, rules mostly need to match against structurally indistinct subsequences. The great virtue of homoiconicity is that syntax mirrors structure, but this comes at a cost. Recall that when learning a Lisp dialect for the first time, you have to slowly develop a feel for where there are implicit `progn`-type constructs, but once you do, you can write and understand very concise code. CLOMeta uses implicit `seq` clauses in two places: surrounding rule bodies, and surrounding the insides of `list` clauses. You will usually only need to use explicit `seq` clauses to enclose alternatives in an `or` clause.
+Using a Lispy, parenful syntax causes some tension in trying to bridge the worlds of parsing and pattern matching. In Lispy pattern-matching, parentheses visually indicate the a static *structural* pattern you want to match. But in early parsing phases like tokenization, rules mostly need to match against structurally indistinct subsequences. The great virtue of homoiconicity is that syntax mirrors structure, but this comes at a cost. Recall that when learning a Lisp dialect for the first time, you have to slowly develop a feel for where there are implicit `progn`-type constructs, but once you do, you can write and understand very concise code. CLOMeta uses implicit `seq` clauses in three places: surrounding rule bodies, and surrounding the insides of `list` and `?` clauses. You will usually only need to use explicit `seq` clauses to enclose alternatives in an `or` clause.
 
 To better indicate the boundaries between OMeta expressions and plain Lisp expressions, semantic actions are preceded by keywords `:->?` and `:->` (instead of being wrapped in s-expressions with `->?` and `->` as the head):
 
@@ -25,17 +25,45 @@ To better indicate the boundaries between OMeta expressions and plain Lisp expre
 ## Operations
 
 ```lisp
-(~ exp) ;; negation - does not consume input
+;; negation - does not consume input
+(~ exp)
+
 (bind var exp)
-(seq exp ...) ;; sequence - returns result of final expression
+
+;; sequence - returns result of final expression
+(seq exp ...)
+
 (or exp ...)
-(* exp) ;; Kleene star
-(+ exp) ;; Kleene plus
-(list exp ...) ;; list - expressions wrapped in implicit seq clause
-_ ;; anything (despite the symbol's typical meaning in pattern matchers, you can still bind its result)
-(apply rule arg ...) ;; apply rule - rules are methods, so they can be passed around with #'rule
-(next-rule) ;; invoke rule with same name in supergrammar
-(foreign grammar rule arg ...) ;; apply a rule that does not appear in this grammar or its supergrammars
+
+;; Kleene star
+(* exp)
+
+;; Kleene plus
+(+ exp)
+
+;; zero or one - expressions wrapped in implicit seq clause
+(? exp ...)
+
+;; list - expressions wrapped in implicit seq clause
+(list exp ...)
+
+;; anything (despite the symbol's typical meaning in pattern matchers, you can still bind its result)
+_
+
+;; apply rule - rules are methods, so they can be passed around with #'rule
+(apply rule arg ...)
+
+;; invoke rule with same name in supergrammar
+(next-rule)
+
+;; apply a rule that does not appear in this grammar or its supergrammars
+(foreign grammar rule arg ...)
+
+;; semantic action - always succeeds
+:-> form
+
+;; semantic predicate - fails if form is nil
+:->? form
 ```
 
 ## Semantics

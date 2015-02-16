@@ -126,6 +126,11 @@
     :accessor subclause
     :initarg :subclause)))
 
+(defclass ?-clause (ometa-clause)
+  ((subclause
+    :accessor subclause
+    :initarg :subclause)))
+
 (defclass neg-clause (ometa-clause)
   ((subclause
     :accessor subclause
@@ -260,14 +265,33 @@
                                (clometa.i:bind form (real-clause))))
                  (clometa.i:-> (make-instance 'many-clause
                                       :subclause form))))
-  (plus (clometa.i:seq* (list (clometa.i:seq* (atom '+)
-                              (clometa.i:bind form (real-clause))))
-                (clometa.i:-> (make-instance 'plus-clause
+  (plus (clometa.i:seq* (list (clometa.i:seq*
+                               (atom '+)
+                               (clometa.i:bind form (real-clause))))
+                        (clometa.i:-> (make-instance 'plus-clause
                                      :subclause form))))
-  (@neg (clometa.i:seq* (list (clometa.i:seq* (atom '~)
-                              (clometa.i:bind form (real-clause))))
-                (clometa.i:-> (make-instance 'neg-clause
-                                     :subclause form))))
+  (? (clometa.i:seq* (list (clometa.i:seq*
+                            (atom '?)
+                            (clometa.i:bind clauses (clometa.i:many (real-clause)))))
+                     (clometa.i:->
+                      (let ((hoisted-bindings
+                             (remove-duplicates
+                              (loop for clause in clauses
+                                   appending (hoisted-bindings clause)
+                                   appending (bindings clause)))))
+                        (loop for clause in clauses
+                             do (setf (hoisted-bindings clause) nil))
+                        (make-instance '?-clause
+                                       :bindings nil
+                                       :hoisted-bindings hoisted-bindings
+                                       :subclause
+                                       (make-instance 'seq*-clause
+                                                      :subclauses clauses))))))
+  (@neg (clometa.i:seq* (list (clometa.i:seq*
+                               (atom '~)
+                               (clometa.i:bind form (real-clause))))
+                        (clometa.i:-> (make-instance 'neg-clause
+                                                     :subclause form))))
   (@bind (clometa.i:seq* (list (clometa.i:seq* (atom 'bind)
                                (clometa.i:bind var (symbol))
                                (clometa.i:bind subclause (real-clause))))
@@ -319,6 +343,7 @@
     (@or)
     (@many)
     (plus)
+    (?)
     (@neg)
     (@bind)
     (@->)
@@ -510,7 +535,7 @@
 
 (defmethod generate-code ((clause atomic-clause))
   (lambda (cont)
-    (with-gensyms (item rest-results stream)
+    (with-gensyms (item stream)
       `(if (endp *stream*)
            (signal 'match-failure)
            (let ((,item (first *stream*)))
@@ -524,11 +549,12 @@
 
 (defmethod generate-code ((clause application-clause))
   (lambda (cont)
-    (with-gensyms (rule result rest-results stream)
+    (with-gensyms (rule result stream)
       `(let ((,rule ,(rule-form clause)))
          (multiple-value-bind (,result ,stream)
              (apply ,rule
                     (list ,@(args clause)))
+           (declare (ignorable ,result))
            (let ((*stream* ,stream))
              ,(alet (funcall cont)
                     (if (eql it empty-value)
@@ -537,9 +563,10 @@
 
 (defmethod generate-code ((clause next-rule-clause))
   (lambda (cont)
-    (with-gensyms (result rest-results stream)
+    (with-gensyms (result stream)
       `(multiple-value-bind (,result ,stream)
            (call-next-layered-method ,@(args clause))
+         (declare (ignorable ,result))
          (let ((*stream* ,stream))
            ,(alet (funcall cont)
                   (if (eql it empty-value)
@@ -548,9 +575,10 @@
 
 (defmethod generate-code ((clause call-clause))
   (lambda (cont)
-    (with-gensyms (result rest-results stream)
+    (with-gensyms (result stream)
       `(multiple-value-bind (,result ,stream)
            (,(rule clause) ,@(args clause))
+         (declare (ignorable ,result))
          (let ((*stream* ,stream))
            ,(alet (funcall cont)
                   (if (eql it empty-value)
@@ -559,10 +587,11 @@
 
 (defmethod generate-code ((clause foreign-clause))
   (lambda (cont)
-    (with-gensyms (result rest-results stream)
+    (with-gensyms (result stream)
       `(multiple-value-bind (,result ,stream)
            (with-active-layers (,(grammar clause))
              (,(rule clause) ,@(args clause)))
+         (declare (ignorable ,result))
          (let ((*stream* ,stream))
            ,(alet (funcall cont)
                   (if (eql it empty-value)
@@ -571,7 +600,7 @@
 
 (defmethod generate-code ((clause or-clause))
   (lambda (cont)
-    (with-gensyms (result rest-results stream block)
+    (with-gensyms (result stream block)
       `(let (,@(hoisted-bindings clause))
          (multiple-value-bind (,result ,stream)
              (block ,block
@@ -594,6 +623,7 @@
                                ,(clometa.i:omatch ast->code
                                                   start (list last-clause))
                              (values ,result ,stream))))))
+           (declare (ignorable ,result))
            (let ((*stream* ,stream))
              ,(alet (funcall cont)
                     (if (eql it empty-value)
@@ -602,7 +632,7 @@
 
 (defmethod generate-code ((clause many-clause))
   (lambda (cont)
-    (with-gensyms (accum result rest-results stream failed repeat)
+    (with-gensyms (accum result stream failed repeat)
       `(let ((,accum nil))
          (labels ((,repeat ()
                     (multiple-value-bind (,result ,stream ,failed)
@@ -621,6 +651,7 @@
                                (,repeat)))))))
            (multiple-value-bind (,result *stream*)
                (,repeat)
+             (declare (ignorable ,result))
              ,(alet (funcall cont)
                     (if (eql it empty-value)
                         `(values ,result *stream*)
@@ -628,7 +659,7 @@
 
 (defmethod generate-code ((clause plus-clause))
   (lambda (cont)
-    (with-gensyms (accum result rest-results stream failed repeat)
+    (with-gensyms (accum result stream failed repeat)
       (let ((subclause-code
              (clometa.i:omatch ast->code
                                start
@@ -654,14 +685,38 @@
                                    (,repeat)))))))
                (multiple-value-bind (,result *stream*)
                    (,repeat)
+                 (declare (ignorable ,result))
                  ,(alet (funcall cont)
                         (if (eql it empty-value)
                             `(values ,result *stream*)
                             it))))))))))
 
+(defmethod generate-code ((clause ?-clause))
+  (lambda (cont)
+    (with-gensyms (result failed)
+      `(let (,@(hoisted-bindings clause))
+         (multiple-value-bind (,result *stream* ,failed)
+             (handler-case
+                 ,(clometa.i:omatch ast->code
+                                    start
+                                    (list (subclause clause)))
+               (match-failure ()
+                 (values failure-value *stream* t)))
+           (declare (ignorable ,result))
+           (when ,failed
+             (setf ,@(loop for binding in (hoisted-bindings clause)
+                        collect binding
+                        collect `nil)))
+           ,(alet (funcall cont)
+                  (if (eql it empty-value)
+                      `(values (if ,failed
+                                   nil
+                                   (list ,result)) *stream*)
+                      it)))))))
+
 (defmethod generate-code ((clause bind-clause))
   (lambda (cont)
-    (with-gensyms (result rest-results stream)
+    (with-gensyms (result stream)
       `(let (,@(hoisted-bindings clause))
          (multiple-value-bind (,result ,stream)
              ,(clometa.i:omatch ast->code start (list (subclause clause)))
@@ -674,8 +729,9 @@
 
 (defmethod generate-code ((clause ->-clause))
   (lambda (cont)
-    (with-gensyms (result rest-results stream)
+    (with-gensyms (result stream)
       `(let ((,result ,(subclause clause)))
+         (declare (ignorable ,result))
          ,(alet (funcall cont)
                 (if (eql it empty-value)
                     `(values ,result *stream*)
@@ -683,7 +739,7 @@
 
 (defmethod generate-code ((clause ->?-clause))
   (lambda (cont)
-    (with-gensyms (result rest-results stream)
+    (with-gensyms (result stream)
       `(let ((,result ,(subclause clause)))
          (if ,result
              ,(alet (funcall cont)
@@ -694,7 +750,7 @@
 
 (defmethod generate-code ((clause list-clause))
   (lambda (cont)
-    (with-gensyms (result rest-results stream substream)
+    (with-gensyms (result stream substream)
       `(cond
          ((endp *stream*)
           (signal 'match-failure))
@@ -720,7 +776,7 @@
 
 (defmethod generate-code ((clause anything-clause))
   (lambda (cont)
-    (with-gensyms (rest-results stream item)
+    (with-gensyms (stream item)
       `(if (endp *stream*)
            (signal 'match-failure)
            (let ((,item (first *stream*))
@@ -732,11 +788,12 @@
 
 (defmethod generate-code ((clause neg-clause))
   (lambda (cont)
-    (with-gensyms (result rest-results stream failed)
+    (with-gensyms (result stream failed)
       `(multiple-value-bind (,result ,stream ,failed)
            (handler-case ,(clometa.i:omatch ast->code start (list (subclause clause)))
              (match-failure ()
                (values failure-value *stream* t)))
+         (declare (ignorable ,result))
          (if ,failed
              ,(alet (funcall cont)
                     (if (eql it empty-value)
@@ -826,6 +883,11 @@
            (clometa.i:-> 
             (make-instance 'many-clause
                            :code (generate-code s)))))
+  (?
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a '?-clause)))
+                   (clometa.i:->
+                    (make-instance '?-clause
+                                   :code (generate-code s)))))
   (@some)
   (@neg
    (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'neg-clause)))
@@ -873,6 +935,7 @@
        (@or)
        (@many)
        (plus)
+       (?)
        (@neg)
        (@bind)
        (@->)
