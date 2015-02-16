@@ -76,21 +76,6 @@
 (defmacro defgrammar (grammar (&optional supergrammar) &rest rules)
   `(progn
      (deflayer ,grammar ,(when supergrammar (list supergrammar)))
-     
-     
-     ;;;;;;;;; to-do!
-     
-     ,@ (let ((rule-alist nil))
-          (loop for rule in rules
-               do (awhen (assoc (first rule) rule-alist)
-                    (push rule (cdr it))
-                    (push (cons (first rule) rule) rule-alist)))
-          (loop for rule-entry in rule-alist
-               collect
-               (let ((rules (cdr rule-entry)))
-                 `(defrule ,(first rule-entry)))
-               )
-          )
      ,@(loop for rule in rules
           collect
             (destructuring-bind (name (&rest args) &body body)

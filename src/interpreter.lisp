@@ -47,7 +47,8 @@
 
 (defun anything ()
   (if (empty? *stream*)
-      (signal 'match-failure nil *stream* *store*);; (failure/empty)
+      (signal 'match-failure;; nil *stream* *store*
+              );; (failure/empty)
       (list (de-index-list (cadr (car *stream*))) (cdr *stream*) *store*)))
 
 (defun init-memo/failure-and-align-flags-for-planting-seed (name)
@@ -58,7 +59,8 @@
 
 (defun align-flags-for-growing-and-failure (name)
   (memo-add name *stream* (m-value (memo name *stream*)) nil t)
-  (signal 'match-failure nil *stream* *store*)
+  (signal 'match-failure;; nil *stream* *store*
+          )
   )
 
 
@@ -93,10 +95,12 @@
                     (not failed))
                (let ((results (grow-lr name body)))
                  (if (eql (first results) *failure-value*)
-                     (apply #'signal 'match-failure (rest results))
+                     ;;(apply #'signal 'match-failure (rest results))
+                     (signal 'match-failure)
                      results)))
               (failed
-               (signal 'match-failure nil stream store))
+               (signal 'match-failure;; nil stream store
+                       ))
               (t
                (list result stream store)))))))
 
@@ -111,7 +115,8 @@
                 (align-flags-for-growing-and-failure name)
                 (let ((results (m-value it)))
                   (if (eql (first results) *failure-value*)
-                      (apply #'signal 'match-failure (rest results))
+                      ;;(apply #'signal 'match-failure (rest results))
+                      (signal 'match-failure)
                       results))))
            ((find-rule-by-name name *rules* args)
             (init-memo-and-match it name args))
@@ -192,7 +197,8 @@
       (multiple-value-match (e `(anything))
         (((guard a (a? a)) stream store)
          (values a stream store))
-        ((_) (signal 'match-failure nil *stream* *store*)))))
+        ((_) (signal 'match-failure;; nil *stream* *store*
+                     )))))
   (:method ((head (eql 'alt)) exp)
     (handler-case (e (second exp))
       (match-failure ()
@@ -215,7 +221,8 @@
     (multiple-value-bind (result stream store)
         (e `(many ,(second exp)))
       (if (null result)
-          (signal 'match-failure nil stream store)
+          (signal 'match-failure;; nil stream store
+                  )
           (values result stream store))))
   (:method ((head (eql '~)) exp)
     (handler-case (e (second exp))
@@ -223,7 +230,8 @@
         (values *empty-value* *stream* *store*))
       (:no-error (result stream store)
         (declare (ignorable result))
-        (signal 'match-failure nil stream store))))
+        (signal 'match-failure;; nil stream store
+                ))))
   (:method ((head (eql 'bind)) exp)
     (multiple-value-bind (result stream store)
         (e (third exp))
@@ -252,11 +260,13 @@
               ,code))
         (if result
             (values *empty-value* *stream* *store*)
-            (signal 'match-failure nil stream store)))))
+            (signal 'match-failure;; nil stream store
+                    )))))
   (:method ((head (eql 'list)) exp)
     (let* ((list-pattern (second exp)))
       (if (empty? *stream*)
-          (signal 'match-failure nil *stream* *store*)
+          (signal 'match-failure;; nil *stream* *store*
+                  )
           (match (car *stream*)
             ((list _ (guard substream (stream? substream)))
              (multiple-value-match
@@ -266,9 +276,11 @@
                 (values (de-index-list substream)
                         (cdr *stream*)
                         store))
-               ((_) (signal 'match-failure nil substream *store*))))
+               ((_) (signal 'match-failure;; nil substream *store*
+                            ))))
             ((list _ (satisfies atom))
-             (signal 'match-failure nil *stream* *store*))
+             (signal 'match-failure;; nil *stream* *store*
+                     ))
             (_ (error "Stream cell must contain a value: ~A"
                       (car *stream*))))))))
 
