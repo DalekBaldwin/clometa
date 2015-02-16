@@ -69,8 +69,8 @@
                                ',grammar
                                (lambda ()
                                  ,(chain-parsers ((ometa-grammar start)
-                                                   (ast->code start))
-                                                  body)))
+                                                  (ast->code start))
+                                                 body)))
                  (match-failure ()
                    (values failure-value *stream* t)))
              
@@ -438,7 +438,7 @@
                     ((eql seed failure-value)
                      (signal 'match-failure))
                     (t
-                     (setf (gethash *stream* *heads*) h)
+                     (setf (gethash *stream* *heads*) h) ;; Line A
                      (grow-lr m h))))
                  ((eql seed failure-value)
                   (signal 'match-failure))
@@ -516,13 +516,10 @@
            (let ((,item (first *stream*)))
              (if (eql ,item ,(thing clause))
                  (let ((*stream* (rest *stream*)))
-                   (multiple-value-bind (,rest-results ,stream)
-                       ,(funcall cont)
-                     (values
-                      (if (eql ,rest-results empty-value)
-                          ,item
-                          ,rest-results)
-                      ,stream)))
+                   ,(alet (funcall cont)
+                          (if (eql it empty-value)
+                              `(values ,item *stream*)
+                              it)))
                  (signal 'match-failure)))))))
 
 (defmethod generate-code ((clause application-clause))
@@ -533,13 +530,10 @@
              (apply ,rule
                     (list ,@(args clause)))
            (let ((*stream* ,stream))
-             (multiple-value-bind (,rest-results ,stream)
-                 ,(funcall cont)
-               (values
-                (if (eql ,rest-results empty-value)
-                    ,result
-                    ,rest-results)
-                ,stream))))))))
+             ,(alet (funcall cont)
+                    (if (eql it empty-value)
+                        `(values ,result *stream*)
+                        it))))))))
 
 (defmethod generate-code ((clause next-rule-clause))
   (lambda (cont)
@@ -547,13 +541,10 @@
       `(multiple-value-bind (,result ,stream)
            (call-next-layered-method ,@(args clause))
          (let ((*stream* ,stream))
-           (multiple-value-bind (,rest-results ,stream)
-               ,(funcall cont)
-             (values
-              (if (eql ,rest-results empty-value)
-                  ,result
-                  ,rest-results)
-              ,stream)))))))
+           ,(alet (funcall cont)
+                  (if (eql it empty-value)
+                      `(values ,result *stream*)
+                      it)))))))
 
 (defmethod generate-code ((clause call-clause))
   (lambda (cont)
@@ -561,13 +552,10 @@
       `(multiple-value-bind (,result ,stream)
            (,(rule clause) ,@(args clause))
          (let ((*stream* ,stream))
-           (multiple-value-bind (,rest-results ,stream)
-               ,(funcall cont)
-             (values
-              (if (eql ,rest-results empty-value)
-                  ,result
-                  ,rest-results)
-              ,stream)))))))
+           ,(alet (funcall cont)
+                  (if (eql it empty-value)
+                      `(values ,result *stream*)
+                      it)))))))
 
 (defmethod generate-code ((clause foreign-clause))
   (lambda (cont)
@@ -576,13 +564,10 @@
            (with-active-layers (,(grammar clause))
              (,(rule clause) ,@(args clause)))
          (let ((*stream* ,stream))
-           (multiple-value-bind (,rest-results ,stream)
-               ,(funcall cont)
-             (values
-              (if (eql ,rest-results empty-value)
-                  ,result
-                  ,rest-results)
-              ,stream)))))))
+           ,(alet (funcall cont)
+                  (if (eql it empty-value)
+                      `(values ,result *stream*)
+                      it)))))))
 
 (defmethod generate-code ((clause or-clause))
   (lambda (cont)
@@ -598,7 +583,7 @@
                             (handler-case
                                 (multiple-value-bind (,result ,stream)
                                     ,(clometa.i:omatch ast->code
-                                               start (list c))
+                                                       start (list c))
                                   (values ,result ,stream))
                               (match-failure ()
                                 (go ,tag))))
@@ -607,16 +592,13 @@
                     ,(let ((last-clause (car (last (subclauses clause)))))
                           `(multiple-value-bind (,result ,stream)
                                ,(clometa.i:omatch ast->code
-                                          start (list last-clause))
+                                                  start (list last-clause))
                              (values ,result ,stream))))))
            (let ((*stream* ,stream))
-             (multiple-value-bind (,rest-results ,stream)
-                 ,(funcall cont)
-               (values
-                (if (eql ,rest-results empty-value)
-                    ,result
-                    ,rest-results)
-                ,stream))))))))
+             ,(alet (funcall cont)
+                    (if (eql it empty-value)
+                        `(values ,result *stream*)
+                        it))))))))
 
 (defmethod generate-code ((clause many-clause))
   (lambda (cont)
@@ -626,9 +608,9 @@
                     (multiple-value-bind (,result ,stream ,failed)
                         (handler-case
                             ,(clometa.i:omatch ast->code
-                                       start
-                                       (list
-                                        (subclause clause)))
+                                               start
+                                               (list
+                                                (subclause clause)))
                           (match-failure ()
                             (values failure-value *stream* t)))
                       (cond (,failed
@@ -639,21 +621,18 @@
                                (,repeat)))))))
            (multiple-value-bind (,result *stream*)
                (,repeat)
-             (multiple-value-bind (,rest-results ,stream)
-                 ,(funcall cont)
-               (values
-                (if (eql ,rest-results empty-value)
-                    ,result
-                    ,rest-results)
-                ,stream))))))))
+             ,(alet (funcall cont)
+                    (if (eql it empty-value)
+                        `(values ,result *stream*)
+                        it))))))))
 
 (defmethod generate-code ((clause plus-clause))
   (lambda (cont)
     (with-gensyms (accum result rest-results stream failed repeat)
       (let ((subclause-code
              (clometa.i:omatch ast->code
-                       start
-                       (list (subclause clause)))))
+                               start
+                               (list (subclause clause)))))
         `(multiple-value-bind (,result ,stream)
              ,subclause-code
            (let ((,accum (list ,result))
@@ -662,9 +641,9 @@
                         (multiple-value-bind (,result ,stream ,failed)
                             (handler-case
                                 ,(clometa.i:omatch ast->code
-                                           start
-                                           (list
-                                            (subclause clause)))
+                                                   start
+                                                   (list
+                                                    (subclause clause)))
                               (match-failure ()
                                 (values failure-value *stream* t)))
                           (cond (,failed
@@ -675,13 +654,10 @@
                                    (,repeat)))))))
                (multiple-value-bind (,result *stream*)
                    (,repeat)
-                 (multiple-value-bind (,rest-results ,stream)
-                     ,(funcall cont)
-                   (values
-                    (if (eql ,rest-results empty-value)
-                        ,result
-                        ,rest-results)
-                    ,stream))))))))))
+                 ,(alet (funcall cont)
+                        (if (eql it empty-value)
+                            `(values ,result *stream*)
+                            it))))))))))
 
 (defmethod generate-code ((clause bind-clause))
   (lambda (cont)
@@ -691,38 +667,29 @@
              ,(clometa.i:omatch ast->code start (list (subclause clause)))
            (setf ,(var clause) ,result)
            (let ((*stream* ,stream))
-             (multiple-value-bind (,rest-results ,stream)
-                 ,(funcall cont)
-               (values
-                (if (eql ,rest-results empty-value)
-                    ,result
-                    ,rest-results)
-                ,stream))))))))
+             ,(alet (funcall cont)
+                    (if (eql it empty-value)
+                        `(values ,result *stream*)
+                        it))))))))
 
 (defmethod generate-code ((clause ->-clause))
   (lambda (cont)
     (with-gensyms (result rest-results stream)
       `(let ((,result ,(subclause clause)))
-         (multiple-value-bind (,rest-results ,stream)
-             ,(funcall cont)
-           (values
-            (if (eql ,rest-results empty-value)
-                ,result
-                ,rest-results)
-            ,stream))))))
+         ,(alet (funcall cont)
+                (if (eql it empty-value)
+                    `(values ,result *stream*)
+                    it))))))
 
 (defmethod generate-code ((clause ->?-clause))
   (lambda (cont)
     (with-gensyms (result rest-results stream)
       `(let ((,result ,(subclause clause)))
          (if ,result
-             (multiple-value-bind (,rest-results ,stream)
-                 ,(funcall cont)
-               (values
-                (if (eql ,rest-results empty-value)
-                    ,result
-                    ,rest-results)
-                ,stream))
+             ,(alet (funcall cont)
+                    (if (eql it empty-value)
+                        `(values ,result *stream*)
+                        it))
              (signal 'match-failure))))))
 
 (defmethod generate-code ((clause list-clause))
@@ -742,13 +709,10 @@
                        (declare (ignore ,result))
                        (cond ((endp ,stream)
                               (let ((*stream* (rest *stream*)))
-                                (multiple-value-bind (,rest-results ,stream)
-                                    ,(funcall cont)
-                                  (values
-                                   (if (eql ,rest-results empty-value)
-                                       ,substream
-                                       ,rest-results)
-                                   ,stream))))
+                                ,(alet (funcall cont)
+                                       (if (eql it empty-value)
+                                           `(values ,substream *stream*)
+                                           it))))
                              (t
                               (signal 'match-failure))))))
                   (t
@@ -761,13 +725,10 @@
            (signal 'match-failure)
            (let ((,item (first *stream*))
                  (*stream* (rest *stream*)))
-             (multiple-value-bind (,rest-results ,stream)
-                 ,(funcall cont)
-               (values
-                (if (eql ,rest-results empty-value)
-                    ,item
-                    ,rest-results)
-                ,stream)))))))
+             ,(alet (funcall cont)
+                    (if (eql it empty-value)
+                        `(values ,item *stream*)
+                        it)))))))
 
 (defmethod generate-code ((clause neg-clause))
   (lambda (cont)
@@ -777,13 +738,10 @@
              (match-failure ()
                (values failure-value *stream* t)))
          (if ,failed
-             (multiple-value-bind (,rest-results ,stream)
-                 ,(funcall cont)
-               (values
-                (if (eql ,rest-results empty-value)
-                    ,result
-                    ,rest-results)
-                ,stream))
+             ,(alet (funcall cont)
+                    (if (eql it empty-value)
+                        `(values ,result *stream*)
+                        it))
              (signal 'match-failure))))))
 
 (defmethod generate-code ((clause seq*-clause))
@@ -948,8 +906,9 @@
                    (clometa.i:-> (funcall (code s)
                                 (lambda () r)))))))
   (start (clometa.i:seq* (list (clometa.i:bind c (real-clause)))
-                 (clometa.i:-> (funcall (code c)
-                                (lambda () `(values empty-value *stream*))))))
+                         (clometa.i:-> (funcall (code c) (lambda () empty-value)
+                                ;;(lambda () `(values empty-value *stream*))
+                                        ))))
   #+nil
   (start (clometa.i:seq*
           (list
@@ -1032,6 +991,7 @@
 
 (defmacro gomatch (grammar rule args input)
   `(let ((*memo* (make-hash-table :test #'equal)))
+     (clrhash *heads*)
      (omatch ,grammar ,rule ,args ,input)))
 
 #+nil
