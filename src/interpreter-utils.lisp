@@ -91,13 +91,6 @@
   (let* ((rev-ans (reverse ans))
          (new-store (car rev-ans)))
     (reverse (cons (append old-store new-store) (cdr rev-ans)))))
-;;(defun pprint (result))
-(defun ptable (stuff)
-  ;;(format t "~&~A~A    Memo:~A")
-  (maphash (lambda (k v)
-             (format t "~A ~A ==> ~A ~A~A"
-                     (first k) (stream-pos0 (second k))
-                     (first (m-value v)) (stream-pos0 (value-stream (m-value v)))))))
 
 (defun failure? (v) (equal :failure (car v)))
 (defun success? (v) (not (failure? v)))
