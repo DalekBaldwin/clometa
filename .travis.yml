@@ -29,5 +29,5 @@ script:
                   (lambda (c h)
                     (declare (ignore c h))
                     (uiop:quit -1))))
-             (clometa.i-test:run-all-tests)
-             (clometa.c-test:run-all-tests))'
+             (clometa.i-test:test-all)
+             (clometa.c-test:test-all))'
