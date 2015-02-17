@@ -130,16 +130,10 @@
 ;;; lambda-list::= (wholevar reqvars optvars restvar keyvars auxvars) |
 ;;;                (wholevar reqvars optvars . var)
 
-(defgrammar destructuring-lambda-list ()
+(defgrammar destructuring-lambda-list (ordinary-lambda-list)
   (var ()
-       (or (foreign ordinary-lambda-list var)
+       (or (next-rule)
            (list<< (start))))
-  (keyword-name ()
-                (foreign ordinary-lambda-list sat #'keywordp))
-  (init-form ()
-             (foreign ordinary-lambda-list init-form))
-  (supplied-p-parameter ()
-                        (foreign ordinary-lambda-list supplied-p-parameter))
   (start ()
          (or
           (seq<< (whole-var)
@@ -152,25 +146,7 @@
           (list* (req-vars)
                  (opt-vars)
                  (var))))
-  (req-vars () (* (var)))
-  (opt-vars () (? '&optional
-                  (* (or (var)
-                         (list (var)
-                               (? (init-form)
-                                  (? (supplied-p-parameter))))))))
   (rest-var () (? (or '&rest '&body) (var)))
-  (key-vars () (? '&key
-                  (bind vars
-                    (* (or (var)
-                           (list (or (var)
-                                     (list (keyword-name) (var)))
-                                 (? (init-form)
-                                    (? (supplied-p-parameter)))))))
-                  (? '&allow-other-keys)
-                  :-> vars))
-  (aux-vars () (? '&aux (* (or (var)
-                               (list (var)
-                                     (? (init-form)))))))
   (env-var () (? '&environment (var)))
   (whole-var () (? '&whole (var))))
 
