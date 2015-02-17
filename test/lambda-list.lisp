@@ -58,6 +58,7 @@
                              &optional c (d :d) (e :e e-p)
                              &rest rest
                              &key f (g) ((:h h)) (i :i i-p)
+                             &allow-other-keys
                              &aux j (k) (l :l)))))))
 
 ;;; lambda-list::= (var*
@@ -65,21 +66,20 @@
 ;;;                 [&rest var]
 ;;;                 [&key {var | ({var | (keyword-name var)})}* [&allow-other-keys]])
 
-(defgrammar generic-function-lambda-list ()
-  (var () (foreign ordinary-lambda-list var))
-  (keyword-name () (foreign ordinary-lambda-list sat #'keywordp))
+(defgrammar generic-function-lambda-list (ordinary-lambda-list)
   (start ()
-         (seq<< (foreign ordinary-lambda-list req-vars)
-                (opt-vars)
-                (foreign ordinary-lambda-list rest-var)
-                (key-vars)))
+         (seq<< (req-vars) ;; inherited
+                (opt-vars) ;; modified
+                (rest-var) ;; inherited
+                (key-vars) ;; modified
+                ))
   (opt-vars () (? '&optional
                   (* (or (var)
                          (list (var))))))
   (key-vars () (? '&key
                   (* (or (var)
                          (list (or (var)
-                                   (list (keyword-name) (var))))))
+                                   (list (sat #'keywordp) (var))))))
                   (? '&allow-other-keys))))
 
 (deftest test-generic-function-lambda-list ()
@@ -90,7 +90,8 @@
                            '(a b
                              &optional c (d)
                              &rest rest
-                             &key e (f) ((:g g))))))))
+                             &key e (f) ((:g g))
+                             &allow-other-keys))))))
 
 ;;; lambda-list::= ({var | (var [specializer])}*
 ;;;                 [&optional {var | (var [init-form [supplied-p-parameter]])}*]
@@ -115,6 +116,7 @@
                              &optional d (e :e) (f :f f-p)
                              &rest rest
                              &key g (h) ((:i i)) (j :j j-p) ((:k k) :k k-p)
+                             &allow-other-keys
                              &aux l (m) (n :n)))))))
 
 ;;; reqvars::= var*
@@ -157,11 +159,15 @@
                                (? (init-form)
                                   (? (supplied-p-parameter))))))))
   (rest-var () (? (or '&rest '&body) (var)))
-  (key-vars () (? '&key (* (or (var)
-                               (list (or (var)
-                                         (list (keyword-name) (var)))
-                                     (? (init-form)
-                                        (? (supplied-p-parameter))))))))
+  (key-vars () (? '&key
+                  (bind vars
+                    (* (or (var)
+                           (list (or (var)
+                                     (list (keyword-name) (var)))
+                                 (? (init-form)
+                                    (? (supplied-p-parameter)))))))
+                  (? '&allow-other-keys)
+                  :-> vars))
   (aux-vars () (? '&aux (* (or (var)
                                (list (var)
                                      (? (init-form)))))))
@@ -178,6 +184,7 @@
                              &optional c (d) (e :e) (f :f f-p)
                              &rest rest
                              &key g (h) ((:i i)) (j :j)
+                             &allow-other-keys
                              &aux k (l) (m :m))))))
   (is (null
        (nth-value 1
