@@ -31,6 +31,7 @@
             :components ((:file "package")
                          (:file "interpreter-test")
                          (:file "util")
-                         (:file "compiler-test"))
+                         (:file "compiler-test")
+                         (:file "lambda-list"))
             :serial t))
   :depends-on (:clometa :stefil :cl-hash-util))
