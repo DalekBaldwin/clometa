@@ -11,7 +11,7 @@ env:
     - LISP=clisp
     - LISP=clisp32
 #    - LISP=cmucl # /home/travis/.cim/bin/cl: 4: .: Can't open /home/travis/.cim/config/current.3271
-#    - LISP=ecl # mysterious failure...
+    - LISP=ecl
 
 install:
   - if [ -x ./install.sh ] && head -2 ./install.sh | grep '^# cl-travis' > /dev/null;
