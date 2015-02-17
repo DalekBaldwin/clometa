@@ -91,7 +91,7 @@ CLOMeta will expand macros that appear in operator position. CLOMeta follows Cor
 
 ```lisp
 (defmacro list<< (&rest clauses)
-  (let ((gensyms (loop for thing in stuff collect (gensym))))
+  (let ((gensyms (loop for clause in clauses collect (gensym))))
     `(seq (list
            ,@(loop for clause in clauses
                 for sym in gensyms
