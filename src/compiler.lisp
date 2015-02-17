@@ -204,8 +204,6 @@
 (defclass anything-clause (ometa-clause)
   ())
 
-
-
 (clometa.i:define-ometa ometa-grammar
   (symbol (clometa.i:seq* (clometa.i:bind s (clometa.i:anything))
                   (clometa.i:->? (symbolp s))
@@ -246,6 +244,14 @@
                                         :grammar grammar
                                         :rule rule
                                         :args args))))
+  (macro (clometa.i:seq* (list (clometa.i:seq*
+                                (clometa.i:bind head (symbol))
+                                (clometa.i:->? (macro-function head))
+                                (clometa.i:bind rest (clometa.i:many
+                                                      (clometa.i:anything)))))
+                         (clometa.i:->
+                          (clometa.i:omatch ometa-grammar real-clause
+                                             (macroexpand (cons head rest))))))
   (@or (clometa.i:seq* (list (clometa.i:seq* (atom 'or)
                              (clometa.i:bind clauses
                                (clometa.i:many (real-clause)))))
@@ -355,6 +361,7 @@
     (foreign)
     (application)
     (quotation)
+    (macro)
     (call)
     (atomic))
    )

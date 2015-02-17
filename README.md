@@ -1,5 +1,7 @@
 # CLOMeta
 
+[![Build Status](https://travis-ci.org/DalekBaldwin/clometa.svg?branch=master)](https://travis-ci.org/DalekBaldwin/clometa)
+
 This repository contains a non-fully-featured OMeta interpreter based on [Vlad Kozin's implementation in Racket](https://github.com/vkz/ometa-racket), and an almost-complete CLOMeta compiler bootstrapped from that interpreter. This is not an OMeta implementation in Common Lisp. If it were, it would be called `cl-ometa`, but instead it's a non-hyphenated `clometa`. It's still in the feel-out-the-proper-shape-of-the-code-as-I-write-it phase, so what follows is more of an explanation of design choices so far than proper documentation.
 
 ## Syntax
@@ -50,13 +52,16 @@ To better indicate the boundaries between OMeta expressions and plain Lisp expre
 ;; anything (despite the symbol's typical meaning in pattern matchers, you can still bind its result)
 _
 
-;; apply rule - rules are methods, so they can be passed around with #'rule
+;; invoke rule by name
+(rule arg ...)
+
+;; apply rule by value - rules are methods, so they can be passed around with #'rule
 (apply rule arg ...)
 
-;; invoke rule with same name in supergrammar
+;; invoke rule with same name in supergrammar - applies same args by default
 (next-rule)
 
-;; apply a rule that does not appear in this grammar or its supergrammars
+;; invoke a rule that does not appear in this grammar or its supergrammars
 (foreign grammar rule arg ...)
 
 ;; semantic action - always succeeds
@@ -81,6 +86,22 @@ Bindings established within repetition patterns (`*`/`+`) are not accessible to 
 ### Negation
 Bindings established within `~` patterns are not accessible to the surrounding pattern. The rationale is similar to that for alternation; those bindings can only be referenced later if the pattern *doesn't* match, so what would you use them for anyway?
 
-## To do
+There are other potential changes to the core semantics that might be nice, but they aren't totally necessary because you can use...
+
+### Macros
+
+CLOMeta will expand macros that appear in operator position. CLOMeta follows Core-OMeta semantics for lists, returning the original list object that matched. If you instead want a list of the results of all the subclauses, you can do something like this:
+
+```lisp
+(defmacro list<< (&rest clauses)
+  (let ((gensyms (loop for clause in clauses collect (gensym))))
+    `(seq (list
+           ,@(loop for clause in clauses
+                for sym in gensyms
+                collect `(bind ,sym ,clause)))
+          :-> (list ,@gensyms))))
+```
+
+## To Do:
 
 CLOMeta does not yet allow pattern matching on rule parameters. At first glance this seemed to be a good use case for Christophe Rhodes' [generalizers](http://www.european-lisp-symposium.org/rhodes.pdf), but since it looks like OMeta rule arguments must be reassigned the result of the rule application within the body like any other binding, this wouldn't lead to improved modularity or conciseness.
