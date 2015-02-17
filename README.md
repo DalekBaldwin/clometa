@@ -102,6 +102,8 @@ CLOMeta will expand macros that appear in operator position. CLOMeta follows Cor
           :-> (list ,@gensyms))))
 ```
 
+Note that this requires an explicit invocation of the macroexpansion facility in a nonstandard position, so take extra care to make sure the macro is available before the `defgrammar` form is processed.
+
 ## To Do:
 
 CLOMeta does not yet allow pattern matching on rule parameters. At first glance this seemed to be a good use case for Christophe Rhodes' [generalizers](http://www.european-lisp-symposium.org/rhodes.pdf), but since it looks like OMeta rule arguments must be reassigned the result of the rule application within the body like any other binding, this wouldn't lead to improved modularity or conciseness.
