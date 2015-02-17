@@ -200,15 +200,18 @@
 ;;; pattern::= (wholevar reqvars optvars restvar keyvars auxvars) |
 ;;;            (wholevar reqvars optvars . var)
 
-;; &environment can only appear at the top level of a macro lambda list, and can
-;; only appear once, but can appear anywhere in that list
 (defparameter *env-var-seen* nil)
 
 (defgrammar macro-lambda-list (destructuring-lambda-list)
   (env-var ()
-           :->? (null *env-var-seen*)
-           :-> (setf *env-var-seen* t)
-           (next-rule))
+           ;; &environment can only appear at the top level of a macro lambda
+           ;; list, and can only appear once, but can appear anywhere in that list
+           (or (seq :->? *env-var-seen*
+                    (~ (next-rule)))
+               (seq :->? (null *env-var-seen*)
+                    (? (bind result (next-rule))
+                       :-> (setf *env-var-seen* t)
+                       :-> result))))
   (start () (or (list<< (whole-var) (env-var)
                         (req-vars) (env-var)
                         (opt-vars) (env-var)
@@ -228,7 +231,7 @@
 ;;;                    [&allow-other-keys]]
 ;;;                 [&environment var]
 
-(defgrammar defsetf-lambda-list (lambda-list)
+(defgrammar defsetf-lambda-list (ordinary-lambda-list)
   (env-var () (? '&environment (var)))
   (start ()
          (seq<< (req-vars)
