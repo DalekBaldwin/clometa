@@ -52,13 +52,16 @@ To better indicate the boundaries between OMeta expressions and plain Lisp expre
 ;; anything (despite the symbol's typical meaning in pattern matchers, you can still bind its result)
 _
 
-;; apply rule - rules are methods, so they can be passed around with #'rule
+;; invoke rule by name
+(rule arg ...)
+
+;; apply rule by value - rules are methods, so they can be passed around with #'rule
 (apply rule arg ...)
 
-;; invoke rule with same name in supergrammar
+;; invoke rule with same name in supergrammar - applies same args by default
 (next-rule)
 
-;; apply a rule that does not appear in this grammar or its supergrammars
+;; invoke a rule that does not appear in this grammar or its supergrammars
 (foreign grammar rule arg ...)
 
 ;; semantic action - always succeeds
