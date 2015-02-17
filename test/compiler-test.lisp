@@ -126,11 +126,13 @@
 
 #+nil
 (defgrammar factorial ()
-  (fact ((n (eql 0)))
+  (fact ((n 0))
         :-> 1)
   (fact (n)
         (bind m (fact (1- n)))
         :-> (* n m)))
+#+nil
+(gomatch factorial fact (0) nil)
 
 #+nil
 (defgrammar arg-pat-match ()
@@ -241,6 +243,23 @@
        (gomatch assignments assign () (string->list " my_var    = 56"))
        "my_var=56")))
 
+#+nil
+(defgrammar grammar (supergrammar)
+  (rule (arg1 arg2)
+        (~ 'something) ;; negation - does not consume input
+        (or
+         (seq 'something-else
+              (bind x _)) ;; 
+         ()
+         
+         )
+        )
+  (rule (arg1 arg2)
+        (or (bind x (rule1))
+            (bind y (rule2)))
+        :->? (test-predicate x y)
+        :-> (semantic-action x y)))
+
 (defgrammar yacc-is-dead-russ-cox ()
   (start ()
          (bind stuff (recur))
@@ -254,8 +273,38 @@
                   (list left '+ right))
              'n)))
 
+#-ecl ;; I think this blows ECL's stack
 (deftest test-russ-cox ()
   (is (not (eql clometa.c::failure-value
                 (gomatch yacc-is-dead-russ-cox start () '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n)))))
   (is (eql clometa.c::failure-value
                 (gomatch yacc-is-dead-russ-cox start () '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + + n)))))
+
+(defmacro seq<< (&rest stuff)
+  (let ((gensyms (loop for thing in stuff collect (gensym))))
+    `(seq
+      ,@(loop for thing in stuff
+             for sym in gensyms
+             collect `(bind ,sym ,thing))
+      :-> (list ,@gensyms))))
+
+(defmacro list<< (&rest clauses)
+  (let ((gensyms (loop for clause in clauses collect (gensym))))
+    `(seq (list
+           ,@(loop for clause in clauses
+                for sym in gensyms
+                collect `(bind ,sym ,clause)))
+          :-> (list ,@gensyms))))
+
+(defgrammar list<<-grammar ()
+  (thing ()
+         (bind x _)
+         :->? (integerp x)
+         :-> (1+ x))
+  (start ()
+         (list<< (thing) (thing) (thing))))
+
+(deftest test-list<< ()
+  (is (equal
+       (gomatch list<<-grammar start () (list (list 1 2 3)))
+       (list 2 3 4))))
