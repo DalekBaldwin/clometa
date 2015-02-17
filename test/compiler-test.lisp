@@ -280,22 +280,6 @@
   (is (eql clometa.c::failure-value
                 (gomatch yacc-is-dead-russ-cox start () '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + + n)))))
 
-(defmacro seq<< (&rest stuff)
-  (let ((gensyms (loop for thing in stuff collect (gensym))))
-    `(seq
-      ,@(loop for thing in stuff
-             for sym in gensyms
-             collect `(bind ,sym ,thing))
-      :-> (list ,@gensyms))))
-
-(defmacro list<< (&rest clauses)
-  (let ((gensyms (loop for clause in clauses collect (gensym))))
-    `(seq (list
-           ,@(loop for clause in clauses
-                for sym in gensyms
-                collect `(bind ,sym ,clause)))
-          :-> (list ,@gensyms))))
-
 (defgrammar list<<-grammar ()
   (thing ()
          (bind x _)

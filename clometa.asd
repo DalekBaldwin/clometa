@@ -30,6 +30,7 @@
   ((:module :test
             :components ((:file "package")
                          (:file "interpreter-test")
+                         (:file "util")
                          (:file "compiler-test"))
             :serial t))
   :depends-on (:clometa :stefil :cl-hash-util))
