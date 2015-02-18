@@ -276,9 +276,11 @@
 #-ecl ;; I think this blows ECL's stack
 (deftest test-russ-cox ()
   (is (not (eql clometa.c::failure-value
-                (gomatch yacc-is-dead-russ-cox start () '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n)))))
+                (gomatch yacc-is-dead-russ-cox start ()
+                         '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n)))))
   (is (eql clometa.c::failure-value
-                (gomatch yacc-is-dead-russ-cox start () '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + + n)))))
+                (gomatch yacc-is-dead-russ-cox start ()
+                         '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + + n)))))
 
 (defgrammar list<<-grammar ()
   (thing ()
@@ -292,3 +294,13 @@
   (is (equal
        (gomatch list<<-grammar start () (list (list 1 2 3)))
        (list 2 3 4))))
+
+(defgrammar cons-grammar ()
+  (thing () _)
+  (start ()
+         (cons (thing) (thing))))
+
+(deftest test-cons ()
+  (is (equal
+       (gomatch cons-grammar start () (list (cons 1 2)))
+       (cons 1 2))))

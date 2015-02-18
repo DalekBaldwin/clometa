@@ -159,6 +159,14 @@
     :accessor subclause
     :initarg :subclause)))
 
+(defclass cons-clause (ometa-clause)
+  ((car-clause
+    :accessor car-clause
+    :initarg :car-clause)
+   (cdr-clause
+    :accessor cdr-clause
+    :initarg :cdr-clause)))
+
 (defclass seq*-clause (ometa-clause)
   ((subclauses
     :accessor subclauses
@@ -321,6 +329,23 @@
                 (clometa.i:bind form (clometa.i:anything))
                 (clometa.i:-> (make-instance '->?-clause
                                      :subclause form))))
+  (cons (clometa.i:seq* (list (clometa.i:seq* (atom 'cons)
+                                               (clometa.i:bind car (real-clause))
+                                               (clometa.i:bind cdr (real-clause))))
+                        (clometa.i:->
+                         (let ((hoisted-bindings
+                                (remove-duplicates
+                                 (append (hoisted-bindings car)
+                                         (bindings car)
+                                         (hoisted-bindings cdr)
+                                         (bindings cdr)))))
+                           (setf (hoisted-bindings car) nil
+                                 (hoisted-bindings cdr) nil)
+                           (make-instance 'cons-clause
+                                          :bindings nil
+                                          :hoisted-bindings hoisted-bindings
+                                          :car-clause car
+                                          :cdr-clause cdr)))))
   (@list (clometa.i:seq* (list (clometa.i:seq* (atom 'list)
                                (clometa.i:bind clauses (clometa.i:many (real-clause)))))
                  (clometa.i:->
@@ -354,6 +379,7 @@
     (@bind)
     (@->)
     (@->?)
+    (cons)
     (@list)
     (@seq)
     (@anything)
@@ -755,6 +781,40 @@
                         it))
              (signal 'match-failure))))))
 
+(defmethod generate-code ((clause cons-clause))
+  (lambda (cont)
+    (with-gensyms (stream-head stream-rest result stream substream)
+      `(cond
+         ((endp *stream*)
+          (signal 'match-failure))
+         (t
+          (let ((,stream-head (first *stream*)))
+            (cond ((consp ,stream-head)
+                   (let ((,stream-rest (rest *stream*))
+                         ,@(hoisted-bindings clause))
+                     (let ((*stream* (list (car ,stream-head))))
+                       (multiple-value-bind (,result ,stream)
+                           ,(clometa.i:omatch ast->code start (list (car-clause clause)))
+                         (declare (ignore ,result))
+                         (cond ((endp ,stream)
+                                (let ((*stream* (list (cdr ,stream-head))))
+                                  (multiple-value-bind (,result ,stream)
+                                      ,(clometa.i:omatch ast->code start
+                                                         (list (cdr-clause clause)))
+                                    (declare (ignore ,result))
+                                    (cond ((endp ,stream)
+                                           (let ((*stream* ,stream-rest))
+                                             ,(alet (funcall cont)
+                                                    (if (eql it empty-value)
+                                                        `(values ,stream-head *stream*)
+                                                        it))))
+                                          (t
+                                           (signal 'match-failure))))))
+                               (t
+                                (signal 'match-failure)))))))
+                  (t
+                   (signal 'match-failure)))))))))
+
 (defmethod generate-code ((clause list-clause))
   (lambda (cont)
     (with-gensyms (result stream substream)
@@ -919,6 +979,11 @@
            (clometa.i:-> 
             (make-instance '->?-clause
                            :code (generate-code s)))))
+  (cons
+   (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'cons-clause)))
+                   (clometa.i:->
+                    (make-instance 'cons-clause
+                                   :code (generate-code s)))))
   (@list
    (clometa.i:seq* (clometa.i:bind s (satisfies (is-a 'list-clause)))
            (clometa.i:-> 
@@ -948,6 +1013,7 @@
        (@->)
        (@->?)
        (@->)
+       (cons)
        (@list)
        (next-rule)
        (application)
