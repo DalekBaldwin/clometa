@@ -44,6 +44,7 @@ To better indicate the boundaries between OMeta expressions and plain Lisp expre
 (+ exp)
 
 ;; zero or one - expressions wrapped in implicit seq clause
+;; returns nil on match failure, or a one-element list containing the result to disambiguate from successful match returning nil
 (? exp ...)
 
 ;; list - expressions wrapped in implicit seq clause
