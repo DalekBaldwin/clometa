@@ -1022,14 +1022,6 @@
        (call)
        (atomic)))
     (clometa.i:-> c)))
-  #+nil
-  (proc (clometa.i:alt* (clometa.i:seq* (clometa.i:bind s (real-clause))
-                        (clometa.i:bind e (clometa.i:~ (clometa.i:anything)))
-                        (clometa.i:-> (funcall (code s) (lambda () `(values empty-value *stream*)))))
-                (clometa.i:seq* (clometa.i:bind s (real-clause))
-                        (clometa.i:bind r (proc))
-                        (clometa.i:-> (funcall (code s)
-                                       (lambda () r))))))
   
   ;; use this to deal with internal seqs for list
   (proc  (clometa.i:seq* (clometa.i:bind s (real-clause))
@@ -1042,79 +1034,7 @@
                    (clometa.i:-> (funcall (code s)
                                 (lambda () r)))))))
   (start (clometa.i:seq* (list (clometa.i:bind c (real-clause)))
-                         (clometa.i:-> (funcall (code c) (lambda () empty-value)
-                                ;;(lambda () `(values empty-value *stream*))
-                                        ))))
-  #+nil
-  (start (clometa.i:seq*
-          (list
-           (clometa.i:bind result (proc)))
-          (clometa.i:-> result)))
-  #+nil
-  (start (clometa.i:seq*
-          (list
-           (clometa.i:bind conts
-             (clometa.i:many (clometa.i:seq* (clometa.i:bind s (real-clause))
-                             (clometa.i:-> (code s))))))
-          (clometa.i:-> 
-           (reduce (lambda (x y)
-                     (funcall x (lambda () y)))
-                   conts
-                   :from-end t
-                   :initial-value
-                   `(values empty-value *stream*))))))
-
-#+nil
-(reduce (lambda (x y)
-          (funcall x (lambda () y)))
-        (list
-         (lambda (x) (list 1 (funcall x)))
-         (lambda (x) (list 2 (funcall x)))
-         (lambda (x) (list 3 (funcall x)))
-         (lambda (x) (list 4 (funcall x))))
-        :from-end t
-        :initial-value (lambda () nil)
-        )
-
-#+nil
-(print
- (clometa.i:omatch ometa-grammar
-           start
-           '((derp)))
- t)
-
-#+nil
-(print
- (clometa.i:omatch
-  (clometa.i:ometa
-   (derp (list (clometa.i:seq* (clometa.i:~ (clometa.i:anything))))))
-  derp
-  (list))
- t)
-
-
-#+nil
-(let ((step1
-       (clometa.i:omatch ometa-grammar
-                 start
-                 '((or (bind x :x))
-                   :-> x
-                   ))
-        ))
-  (print
-   (clometa.i:omatch ast->code
-             start
-             step1
-             ;;(list  (make-ometa-clause :kind :eql :bindings nil :form '(or (bind x (eql :x)))))
-             )))
-
-#+nil
-(defgrammar stuff ()
-  ;;(barf () (derp :x))
-  ;;(derp (x) x)
-  (blarf ()
-         (bind z _)
-         :-> z))
+                         (clometa.i:-> (funcall (code c) (lambda () empty-value))))))
 
 (defmacro omatch (grammar rule args input)
   `(let ((*stream* ,input))
