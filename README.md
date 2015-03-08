@@ -107,4 +107,4 @@ Note that this requires an explicit invocation of the macroexpansion facility in
 
 ## To Do:
 
-CLOMeta does not yet allow pattern matching on rule parameters. At first glance this seemed to be a good use case for Christophe Rhodes' [generalizers](http://www.european-lisp-symposium.org/rhodes.pdf), but since it looks like OMeta rule arguments must be reassigned the result of the rule application within the body like any other binding, this wouldn't lead to improved modularity or conciseness.
+CLOMeta does not yet allow pattern matching on rule parameters. At first glance this seemed to be a good use case for Christophe Rhodes' [generalizers](http://www.european-lisp-symposium.org/editions/2014/rhodes.pdf), but since it looks like OMeta rule arguments must be reassigned the result of the rule application within the body like any other binding, this wouldn't lead to improved modularity or conciseness.
