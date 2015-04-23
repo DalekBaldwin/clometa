@@ -4,6 +4,16 @@
 
 This repository contains a non-fully-featured OMeta interpreter based on [Vlad Kozin's implementation in Racket](https://github.com/vkz/ometa-racket), and an almost-complete CLOMeta compiler bootstrapped from that interpreter. This is not an OMeta implementation in Common Lisp. If it were, it would be called `cl-ometa`, but instead it's a non-hyphenated `clometa`. It's still in the feel-out-the-proper-shape-of-the-code-as-I-write-it phase, so what follows is more of an explanation of design choices so far than proper documentation.
 
+## Table of Contents
+  * [Syntax](#syntax)
+  * [Operations](#operations)
+  * [Semantics](#semantics)
+    * [Alternation](#alternation)
+    * [Iteration](#iteration)
+    * [Negation](#negation)
+    * [Macros](#macros)
+  * [To Do](#to-do)
+
 ## Syntax
 
 Most OMeta implementations seem to copy the syntax of OMeta/JS, requiring grammars to be written in separate files or as strings that are preprocessed (perhaps by the OMeta implementation itself). CLOMeta is embedded as a DSL. This allows for a straightforward mapping onto ContextL: grammars are context layers, and rules are methods specialized in those layers. Using `(next-rule)` within a rule translates straightforwardly into a call to `call-next-layered-method`. Also, there's no need for grammars to have instance variables - the programmer can manage state more flexibly using the surrounding namespace.
