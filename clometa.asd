@@ -7,6 +7,7 @@
 (defsystem :clometa
   :name "clometa"
   :serial t
+  :author "Kyle Littler"
   :components
   ((:static-file "clometa.asd")
    (:module :src
