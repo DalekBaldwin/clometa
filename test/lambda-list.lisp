@@ -195,16 +195,18 @@
                     (? (bind result (next-rule))
                        :-> (setf *env-var-seen* t)
                        :-> result))))
-  (start () (or (seq<< (whole-var) (env-var)
-                       (req-vars) (env-var)
-                       (opt-vars) (env-var)
-                       (rest-var) (env-var)
-                       (key-vars) (env-var)
-                       (aux-vars) (env-var))
-                #+nil ;; to-do: handle dotted lists
-                (list* (whole-var) (env-var)
-                       (req-vars) (env-var)
-                       (opt-vars) (env-var) . (var)))))
+  (start ()
+         :-> (setf *env-var-seen* nil)
+         (or (seq<< (whole-var) (env-var)
+                    (req-vars) (env-var)
+                    (opt-vars) (env-var)
+                    (rest-var) (env-var)
+                    (key-vars) (env-var)
+                    (aux-vars) (env-var))
+             #+nil ;; to-do: handle dotted lists
+             (list* (whole-var) (env-var)
+                    (req-vars) (env-var)
+                    (opt-vars) (env-var) . (var)))))
 
 ;;; lambda-list::= (var*
 ;;;                 [&optional {var | (var [init-form [supplied-p-parameter]])}*]
