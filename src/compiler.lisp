@@ -14,6 +14,8 @@
 
 (define-condition match-failure () ())
 
+(defun match-failure () (signal 'match-failure))
+
 (defpackage clometa-memos)
 
 (defparameter *memo* nil)
@@ -81,7 +83,7 @@
                ;; restore memo so same rule can be tried with different args
                (setf *memo* ,old-memo))
              (if ,failed
-                 (signal 'match-failure)
+                 (match-failure)
                  (values ,result ,stream))))))))
 
 (defmacro defgrammar (grammar (&optional supergrammar) &rest rules)
@@ -494,12 +496,12 @@
                         (memo-entry-lr m) nil)
                   (cond
                     ((eql seed failure-value)
-                     (signal 'match-failure))
+                     (match-failure))
                     (t
                      (setf (gethash *stream* *heads*) h) ;; Line A
                      (grow-lr m h))))
                  ((eql seed failure-value)
-                  (signal 'match-failure))
+                  (match-failure))
                  (t
                   (values seed *stream*)))))
            (setup-lr (lr)
@@ -523,11 +525,11 @@
              ((memo-entry-lr entry)
               (setup-lr it)
               (if (eql (lr-seed it) failure-value)
-                  (signal 'match-failure)
+                  (match-failure)
                   (values failure-value *stream*)))
              (t
               (if (eql (memo-entry-value entry) failure-value)
-                  (signal 'match-failure)
+                  (match-failure)
                   (values (memo-entry-value entry) *stream*))))))
         (t
          (let* ((lr (make-lr :seed failure-value
@@ -556,7 +558,7 @@
                 (setf (memo-entry-value entry) result
                       (memo-entry-lr entry) nil)
                 (if failed
-                    (signal 'match-failure)
+                    (match-failure)
                     (values result stream)))))))))))
 
 (defun is-a (class-name)
@@ -570,7 +572,7 @@
   (lambda (cont)
     (with-gensyms (item stream)
       `(if (endp *stream*)
-           (signal 'match-failure)
+           (match-failure)
            (let ((,item (first *stream*)))
              (if (eql ,item ,(thing clause))
                  (let ((*stream* (rest *stream*)))
@@ -578,7 +580,7 @@
                           (if (eql it empty-value)
                               `(values ,item *stream*)
                               it)))
-                 (signal 'match-failure)))))))
+                 (match-failure)))))))
 
 (defmethod generate-code ((clause application-clause))
   (lambda (cont)
@@ -779,14 +781,14 @@
                     (if (eql it empty-value)
                         `(values ,result *stream*)
                         it))
-             (signal 'match-failure))))))
+             (match-failure))))))
 
 (defmethod generate-code ((clause cons-clause))
   (lambda (cont)
     (with-gensyms (stream-head stream-rest result stream)
       `(cond
          ((endp *stream*)
-          (signal 'match-failure))
+          (match-failure))
          (t
           (let ((,stream-head (first *stream*)))
             (cond ((consp ,stream-head)
@@ -809,18 +811,18 @@
                                                         `(values ,stream-head *stream*)
                                                         it))))
                                           (t
-                                           (signal 'match-failure))))))
+                                           (match-failure))))))
                                (t
-                                (signal 'match-failure)))))))
+                                (match-failure)))))))
                   (t
-                   (signal 'match-failure)))))))))
+                   (match-failure)))))))))
 
 (defmethod generate-code ((clause list-clause))
   (lambda (cont)
     (with-gensyms (result stream substream)
       `(cond
          ((endp *stream*)
-          (signal 'match-failure))
+          (match-failure))
          (t
           (let ((,substream (first *stream*)))
             (cond ((listp ,substream)
@@ -837,15 +839,15 @@
                                            `(values ,substream *stream*)
                                            it))))
                              (t
-                              (signal 'match-failure))))))
+                              (match-failure))))))
                   (t
-                   (signal 'match-failure)))))))))
+                   (match-failure)))))))))
 
 (defmethod generate-code ((clause anything-clause))
   (lambda (cont)
     (with-gensyms (stream item)
       `(if (endp *stream*)
-           (signal 'match-failure)
+           (match-failure)
            (let ((,item (first *stream*))
                  (*stream* (rest *stream*)))
              ,(alet (funcall cont)
@@ -866,7 +868,7 @@
                     (if (eql it empty-value)
                         `(values ,result *stream*)
                         it))
-             (signal 'match-failure))))))
+             (match-failure))))))
 
 (defmethod generate-code ((clause seq*-clause))
   (lambda (cont)
