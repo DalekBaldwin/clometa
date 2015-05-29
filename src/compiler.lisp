@@ -1038,7 +1038,7 @@
   (start (clometa.i:seq* (list (clometa.i:bind c (real-clause)))
                          (clometa.i:-> (funcall (code c) (lambda () empty-value))))))
 
-(defmacro omatch (grammar rule args input)
+(defmacro omatch% (grammar rule args input)
   `(let ((*stream* ,input))
      (with-active-layers (,grammar)
        (handler-case
@@ -1047,7 +1047,7 @@
          (match-failure ()
            (values failure-value *stream*))))))
 
-(defmacro gomatch (grammar rule args input)
+(defmacro omatch (grammar rule args input)
   `(let ((*memo* (make-hash-table :test #'equal)))
      (clrhash *heads*)
-     (omatch ,grammar ,rule ,args ,input)))
+     (omatch% ,grammar ,rule ,args ,input)))

@@ -29,7 +29,7 @@
   (spaces () (+ #\space)))
 
 (deftest test-letter ()
-  (is (equal (multiple-value-list (gomatch std letter () (string->list "a1")))
+  (is (equal (multiple-value-list (omatch std letter () (string->list "a1")))
              '(#\a (#\1)))))
 
 (defgrammar simple-binding ()
@@ -41,7 +41,7 @@
 
 (deftest test-simple-binding ()
   (is (equal (multiple-value-list
-              (gomatch simple-binding start () '((1 2))))
+              (omatch simple-binding start () '((1 2))))
              '((1 2) nil))))
 
 (defgrammar simple-binding-call ()
@@ -53,7 +53,7 @@
 
 (deftest test-binding-call ()
   (is (equal (multiple-value-list
-              (gomatch simple-binding-call start () '((1 (2 3)))))
+              (omatch simple-binding-call start () '((1 (2 3)))))
              '((1 (2 3)) nil))))
 
 (defgrammar simple-apply ()
@@ -67,7 +67,7 @@
 
 (deftest test-simple-apply ()
   (is (equal (multiple-value-list
-              (gomatch simple-apply start () (string->list "1,1,1")))
+              (omatch simple-apply start () (string->list "1,1,1")))
              '((#\1 #\1 #\1) nil))))
 
 (defgrammar left-recursion ()
@@ -87,7 +87,7 @@
 
 (deftest test-left-recursion ()
   (is (equal (multiple-value-list
-              (gomatch left-recursion start () (string->list "1+2-3")))
+              (omatch left-recursion start () (string->list "1+2-3")))
              '((sub (add #\1 #\2) #\3) nil))))
 
 (defgrammar direct-left-recursion ()
@@ -102,7 +102,7 @@
 
 (deftest test-direct-left-recursion ()
   (is (equal (multiple-value-list
-              (gomatch direct-left-recursion start () (string->list "1-2-3")))
+              (omatch direct-left-recursion start () (string->list "1-2-3")))
              '(((#\1 #\2) #\3) nil))))
 
 (defgrammar indirect-left-recursion ()
@@ -121,7 +121,7 @@
 
 (deftest test-indirect-left-recursion ()
   (is (equal (multiple-value-list
-              (gomatch indirect-left-recursion expr () (string->list "1,1,1,1")))
+              (omatch indirect-left-recursion expr () (string->list "1,1,1,1")))
              '((#\1 #\1 #\1 #\1) nil))))
 
 #+nil
@@ -132,7 +132,7 @@
         (bind m (fact (1- n)))
         :-> (* n m)))
 #+nil
-(gomatch factorial fact (0) nil)
+(omatch factorial fact (0) nil)
 
 #+nil
 (defgrammar arg-pat-match ()
@@ -170,7 +170,7 @@
                    :-> (char->number d)))))
 
 (deftest test-integers ()
-  (is (= (gomatch integers int () (string->list "567"))
+  (is (= (omatch integers int () (string->list "567"))
          567)))
 
 (defgrammar token (std)
@@ -187,9 +187,9 @@
            (next-rule))))
 
 (deftest test-token ()
-  (is (equal (gomatch token id () (string->list "hello_Id"))
+  (is (equal (omatch token id () (string->list "hello_Id"))
              '(#\h #\e #\l #\l #\o #\_ #\I #\d)))
-  (is (equal (gomatch token num () (string->list "57.877"))
+  (is (equal (omatch token num () (string->list "57.877"))
              '(#\5 #\7 #\. #\8 #\7 #\7))))
 
 (defgrammar flat ()
@@ -211,7 +211,7 @@
        :-> nil))
 
 (deftest test-flatten ()
-  (is (equal (gomatch flat flatten () '((1 (2 (3 4) (5 6)) (((7))))))
+  (is (equal (omatch flat flatten () '((1 (2 (3 4) (5 6)) (((7))))))
              '(1 2 3 4 5 6 7))))
 
 (defgrammar toks (std)
@@ -240,7 +240,7 @@
 
 (deftest test-assignments ()
   (is (equal
-       (gomatch assignments assign () (string->list " my_var    = 56"))
+       (omatch assignments assign () (string->list " my_var    = 56"))
        "my_var=56")))
 
 #+nil
@@ -276,10 +276,10 @@
 #-ecl ;; I think this blows ECL's stack
 (deftest test-russ-cox ()
   (is (not (eql clometa.c::failure-value
-                (gomatch yacc-is-dead-russ-cox start ()
+                (omatch yacc-is-dead-russ-cox start ()
                          '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n)))))
   (is (eql clometa.c::failure-value
-                (gomatch yacc-is-dead-russ-cox start ()
+                (omatch yacc-is-dead-russ-cox start ()
                          '(n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + + n)))))
 
 (defgrammar list<<-grammar ()
@@ -292,7 +292,7 @@
 
 (deftest test-list<< ()
   (is (equal
-       (gomatch list<<-grammar start () (list (list 1 2 3)))
+       (omatch list<<-grammar start () (list (list 1 2 3)))
        (list 2 3 4))))
 
 (defgrammar cons-grammar ()
@@ -302,5 +302,5 @@
 
 (deftest test-cons ()
   (is (equal
-       (gomatch cons-grammar start () (list (cons 1 2)))
+       (omatch cons-grammar start () (list (cons 1 2)))
        (cons 1 2))))

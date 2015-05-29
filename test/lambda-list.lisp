@@ -52,7 +52,7 @@
 (deftest test-ordinary-lambda-list ()
   (is (null
        (nth-value 1
-                  (gomatch ordinary-lambda-list
+                  (omatch ordinary-lambda-list
                            start ()
                            '(a b
                              &optional c (d :d) (e :e e-p)
@@ -85,7 +85,7 @@
 (deftest test-generic-function-lambda-list ()
   (is (null
        (nth-value 1
-                  (gomatch generic-function-lambda-list
+                  (omatch generic-function-lambda-list
                            start ()
                            '(a b
                              &optional c (d)
@@ -110,7 +110,7 @@
 (deftest test-specialized-lambda-list ()
   (is (null
        (nth-value 1
-                  (gomatch specialized-lambda-list
+                  (omatch specialized-lambda-list
                            start ()
                            '(a (b b-class) (c (eql :c))
                              &optional d (e :e) (f :f f-p)
@@ -153,7 +153,7 @@
 (deftest test-destructuring-lambda-list ()
   (is (null
        (nth-value 1
-                  (gomatch destructuring-lambda-list
+                  (omatch destructuring-lambda-list
                            start ()
                            '(&whole whole
                              a b
@@ -164,7 +164,7 @@
                              &aux k (l) (m :m))))))
   (is (null
        (nth-value 1
-                  (gomatch destructuring-lambda-list
+                  (omatch destructuring-lambda-list
                            start ()
                            '(&whole whole
                              (a &optional b)))))))

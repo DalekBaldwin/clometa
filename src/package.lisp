@@ -37,7 +37,6 @@
    #:defgrammar
    #:defrule
    #:omatch
-   #:gomatch
    
    #:_
    #:~
